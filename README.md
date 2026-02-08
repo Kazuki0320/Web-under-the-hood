@@ -22,12 +22,11 @@
 ---
 ## プロジェクト構成
 
-web-under-the-hood/
-├── 01-static-web-nginx/
-├── 02-java-servlet-tomcat/
-├── 03-nginx-reverse-proxy/
-├── 04-apache-vs-nginx/
-└── 05-network-observation/
+- 01-static-web-nginx/
+- 02-java-servlet-tomcat/
+- 03-nginx-reverse-proxy/
+- 04-apache-vs-nginx/
+- 05-network-observation/
 
 
 ---
