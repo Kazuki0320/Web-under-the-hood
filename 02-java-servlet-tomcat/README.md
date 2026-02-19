@@ -38,6 +38,12 @@ Tomcat上で最小のServletを動かし、JavaアプリケーションがWeb上
 curl -i http://localhost:8081/hello
 ```
 
+### `localhost`・`hosts`・ループバックの関係
+- `localhost` はホスト名（名前）で、通常は `hosts` ファイルにより `127.0.0.1`（IPv4）や `::1`（IPv6）へ名前解決される
+- `127.0.0.1` 宛の通信は、物理ネットワークには出ずOS内で完結する
+- この内部経路を担当するのがループバックインターフェース（`lo`）
+- つまり流れは `localhost`（名前） -> `127.0.0.1`（解決先IP） -> `lo`（通信経路）
+
 ## 構成図（Mermaid）
 ```mermaid
 flowchart LR
