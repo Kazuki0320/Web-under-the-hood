@@ -175,10 +175,15 @@ cd /Users/ktoyo/Documents/Web-under-the-hood/02-java-servlet-tomcat && docker co
 02ではTomcatを使い、同じHTTPリクエストに対して「Javaコードを実行してレスポンスを生成する」世界に進む。
 
 ## リクエストの流れ
-1. ブラウザが `GET /hello` を送る
-2. Tomcatが `web.xml` のマッピングを見て `HelloServlet` に振り分ける
-3. `HelloServlet#doGet` が実行される
-4. Javaコードで作った本文がHTTPレスポンスとして返る
+1. ブラウザが `http://localhost:8081/hello` に `GET` を送る
+2. Dockerのポートマッピングで、ホスト `8081` の通信がコンテナ内Tomcat `8080` に届く
+3. Tomcatは起動時に `web.xml` を読み、`/hello -> com.example.HelloServlet` の対応を登録済み
+4. リクエスト到着時、TomcatがURL `/hello` を見て、そのマッピングに一致するServletを特定する
+5. Tomcatが `HelloServlet` をロード（初回）し、必要ならインスタンス化・初期化して管理下に置く
+6. `GET` なので Tomcatが `doGet(req, res)` を呼ぶ
+7. `HelloServlet#doGet` が `Content-Type` を設定し、`PrintWriter` で本文を書き込む
+8. Tomcatがその内容をHTTPレスポンス（ステータス・ヘッダー・ボディ）として返す
+9. ブラウザ（または `curl -i`）がレスポンスを受け取り表示する
 
 ## 触るポイント
 
