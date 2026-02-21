@@ -24,13 +24,23 @@
 
 - 01-static-web-nginx/
 - 02-java-servlet-tomcat/
-- 03-nginx-reverse-proxy/
+- 03-java-only-http-server/
 - 04-apache-vs-nginx/
 - 05-network-observation/
-
 
 ---
 
 このリポジトリは「完成させる」ことよりも、  
 **理解を深め続けるための土台**として育てていく。
+
+---
+
+## 今後学ぶリスト（追加）
+
+- Servlet Filter を触る
+  - 目的: Servlet本体の前後に共通処理を差し込む責務分離を理解する
+  - 最小ステップ:
+    - 全リクエストのURLと処理時間をログ出力するFilterを作る
+    - `/admin` の簡易認可チェック（未認可なら`401`）を作る
+    - `/*` と `/api/*` で適用範囲を変えて挙動を比較する
 
