@@ -231,5 +231,5 @@ docker rmi 7798de2abd51 5860fce48dc2 b1e17acf9e09 9fcb2ad1e8e1 3a0d63427831
 docker image prune
 ```
 
-
-## 次にやるなら
+投稿完了
+https://qiita.com/kazushika/items/168983d944a9d0daf7a3
