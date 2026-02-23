@@ -317,6 +317,24 @@ curl -v http://localhost:8080/notfound
 - エンドポイントごとの `status`、`Content-Type`、本文の要点をメモする
 - 正常系（200）と異常系（404）を並べて比較する
 
+主要ヘッダー/要素の役割まとめ:
+- `status`（例: `200 OK`, `404 Not Found`）
+  - サーバー処理の結果を示す。
+  - クライアントはまずここを見て成功/失敗を判定する。
+- `Content-Type`（例: `text/plain`, `text/html`, `application/json`）
+  - 本文データの種類を示す。
+  - クライアントはこの値で本文の解釈方法を決める（文字列表示、HTML描画、JSONとして処理など）。
+- `Content-Length`
+  - 本文のバイト数を示す。
+  - クライアントは「本文をどこまで読むか」をこの値で判断する。
+  - 値が不正だと本文欠落や待ち状態などの不具合につながる。
+- `Connection: close`
+  - レスポンス後に接続を閉じる方針を示す。
+  - この学習コードでは1リクエストごとに接続終了するため、挙動が分かりやすい。
+- `body`（レスポンス本文）
+  - 実際に返したいデータ本体。
+  - `Content-Type` と `Content-Length` と整合していることが重要。
+
 完了条件:
 - 「どの条件で200/404になるか」を口頭で説明できる
 - HTTPレスポンス構造（ステータス行・ヘッダー・本文）を説明できる
@@ -343,20 +361,6 @@ curl -v http://localhost:8080/notfound
 
 ## 補足FAQ（ここまでの質問まとめ）
 
-### Q1. import していない時のエラーメッセージを見やすくする方法は？
-
-A:
-- VS Code なら `Extension Pack for Java`（実体は Red Hat Java Language Server）が有効。
-- `Cmd + .`（Windows/Linux は `Ctrl + .`）で `Add import` のクイックフィックスが使える。
-- 行内表示を強化するなら `Error Lens` が便利。
-- ターミナルでも `javac src/Main.java` で import 漏れを検出できる。
-
-### Q2. `cp` コマンドと `javac` は何をしている？
-
-A:
-- `cp` はファイル/ディレクトリのコピー。
-- `javac` は `.java` をコンパイルして `.class` を生成する。
-
 ### Q3. `java -cp src Main` の `-cp` はコピーの意味？
 
 A:
@@ -364,12 +368,6 @@ A:
 - 意味は「`src` から `Main.class` を探して実行する」。
 - ファイルコピーは一切していない。
 
-### Q4. `Server listening on port 8080` の後に `curl` すると `Empty reply` になるのはなぜ？
-
-A:
-- Step 2 では TCP 接続受け付けまで実装し、HTTP レスポンスはまだ返していないため。
-- 接続自体は成立しているが、HTTP 文字列が返らないので `curl` は `Empty reply from server` を出す。
-- これは Step 2 として正常な挙動。
 
 ### Q5. リッスンしている状態はどう確認する？
 

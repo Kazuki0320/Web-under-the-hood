@@ -219,6 +219,140 @@ jstack -l <pid> > jstack_$(date +%Y%m%d_%H%M%S).txt
 - Java `out.write(headerBytes)` -> `curl -v` の `< HTTP/1.1 ...` と `< Content-* ...`
 - Java `out.write(bodyBytes)` -> `curl` の本文表示
 
+## 13. 追加Q&A（Step 4/5の読み取りとcurlの送信内容）
+
+### Q1. `BufferedReader reader` と `requestLine` は何をしている？
+
+- `BufferedReader reader` は `client.getInputStream()` の生バイトを「行単位の文字列」で読むためのラッパー。
+- `String requestLine = reader.readLine();` はHTTPリクエストの1行目を取得する。
+- 例: `GET /hello HTTP/1.1`
+- その後、`requestLine.split(" ")` で `method` と `path` を取り出し、ルーティングに使う。
+
+今回の読み取りイメージ:
+```http
+GET /hello HTTP/1.1
+Host: localhost:8080
+User-Agent: curl/8.7.1
+Accept: */*
+
+```
+
+- 1回目の `readLine()` で `GET /hello HTTP/1.1` を取得
+- その後の `while (readLine...)` で `Host` などのヘッダーを空行まで読み進める
+
+### Q2. なぜ `curl` 実行だけで `GET /hello HTTP/1.1` や `Host: localhost:8080` が送られる？
+
+- `curl -v http://localhost:8080/hello` のURLを `curl` が解析して、HTTPリクエスト文字列を自動生成するため。
+- `GET /hello HTTP/1.1` はURLの `path=/hello` から組み立てられるリクエスト行。
+- `Host: localhost:8080` はHTTP/1.1で必要なヘッダーなので `curl` が自動付与する。
+
+### Q3. 付与されるタイミング（シーケンス）
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as curl
+    participant OS as OS TCP stack
+    participant S as Java Server (Main)
+
+    U->>C: curl -v http://localhost:8080/hello
+
+    Note over C: URL解析\nscheme=http, host=localhost,\nport=8080, path=/hello
+    C->>OS: localhostを名前解決
+    OS-->>C: ::1 / 127.0.0.1
+
+    C->>OS: TCP connect(::1:8080)
+    OS->>S: 接続要求を通知
+    S-->>OS: accept()で受理
+    OS-->>C: TCP接続確立
+
+    Note over C: 接続確立後にHTTP文字列を組み立て
+    Note over C: GET /hello HTTP/1.1\nHost: localhost:8080\nUser-Agent: curl/8.7.1\nAccept: */*
+
+    C->>OS: HTTPリクエスト送信(write)
+    OS->>S: サーバーソケットへバイト到達
+
+    S->>S: reader.readLine() 1回目\n=> GET /hello HTTP/1.1
+    S->>S: 空行までヘッダー読取\n=> Host/User-Agent/Accept
+    S->>OS: HTTPレスポンス送信
+    OS-->>C: レスポンス受信
+```
+
+## 14. 追加Q&A（ポートの見方）
+
+### Q1. サーバーが `8080` を開いていれば十分？クライアント側の一時ポートも必要？
+
+はい、両方必要。
+
+- サーバー側: 待受ポート（例: `8080`）
+- クライアント側: 一時ポート（例: `63183`）
+
+TCP接続は次の4つ組で識別される:
+- `clientIP`
+- `clientPort`
+- `serverIP`
+- `serverPort`
+
+一時ポートはレスポンス専用ではなく、接続開始時（`connect()`）から使われ、同じ接続の送受信両方で使われる。
+
+### Q2. `Accepted: /[0:0:0:0:0:0:0:1]:63183` は何を示す？
+
+- `[0:0:0:0:0:0:0:1]` は `::1`（IPv6 localhost）
+- `:63183` はクライアント側の一時ポート
+
+これは `client.getRemoteSocketAddress()` の値なので、表示しているのは「相手（クライアント）側」の情報。
+
+接続全体の例:
+- `::1:63183 -> ::1:8080`
+
+このとき:
+- 左側がクライアント（curl）
+- 右側がサーバー（Main）
+
+## 15. 追加Q&A（ServerSocketの低レイヤーとブラウザ表示）
+
+### Q1. `new ServerSocket(8080)` は何をしている？
+
+- Javaオブジェクトを作るだけでなく、OSに対して待受ソケット作成を依頼している。
+- 低レイヤーでは概ね `socket()` -> `bind()` -> `listen()` の順で実行される。
+- 結果としてOS上で `8080` が `LISTEN` 状態になる。
+
+### Q2. TCPソケットはどこに作られる？
+
+- ソケット実体はOSのカーネル空間（ネットワークスタック管理領域）に作られる。
+- Javaプロセスは、そのソケットを参照するファイルディスクリプタを持って操作する。
+
+### Q3. `bind`（指定ポートにバインド）とは？
+
+- 「このソケットにローカルIP:ポートを割り当てる」操作。
+- 例: `::1:8080` または `0.0.0.0:8080`。
+- これによりOSは「8080宛の接続をこの待受ソケットに渡す」と判断できるようになる。
+
+### Q4. OS上の空間は他に何がある？
+
+大きく2つ:
+
+1. ユーザー空間
+- `java`, `curl`, ブラウザなどのアプリが動く場所
+- ハードウェアやネットワーク制御は直接できず、システムコールでOSに依頼する
+
+2. カーネル空間
+- OS本体が動く場所
+- プロセス管理、メモリ管理、ファイルシステム、ネットワークスタック、ドライバなどを担当する
+
+### Q5. なぜブラウザは文字を表示できる？
+
+- HTTPレスポンスのヘッダーを見て、本文をどう解釈するか決めるため。
+- 具体的には `Content-Type` と `charset` を見て本文バイト列を文字に変換する。
+
+例:
+- `text/plain` -> 文字として表示
+- `text/html` -> HTMLとして解析して描画
+- `application/json` -> JSONデータとして扱う（表示/整形）
+
+ポイント:
+- 本文だけでなく `Content-Type` と `Content-Length` の整合が表示品質に直結する。
+
 ## 用語メモ
 
 - 輻輳制御: `ふくそうせいぎょ`
