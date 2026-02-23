@@ -175,6 +175,61 @@ curl -v http://localhost:8080/
 - `String[] parts = requestLine.split(" ");`
 - `parts[0]` を method、`parts[1]` を path として扱う
 
+実装例（`src/Main.java` の接続処理部分）:
+```java
+try (Socket client = server.accept()) {
+    System.out.println("Accepted: " + client.getRemoteSocketAddress());
+
+    BufferedReader reader = new BufferedReader(
+            new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
+
+    String requestLine = reader.readLine(); // 例: GET / HTTP/1.1
+    if (requestLine == null || requestLine.isEmpty()) {
+        continue;
+    }
+
+    String line;
+    while ((line = reader.readLine()) != null && !line.isEmpty()) {
+        // Step 4ではヘッダーは読み飛ばすだけ
+    }
+
+    String[] parts = requestLine.split(" ");
+    String method = parts.length > 0 ? parts[0] : "";
+    String path = parts.length > 1 ? parts[1] : "";
+    System.out.println("method=" + method + ", path=" + path);
+
+    // Step 4時点ではレスポンスは固定でOK
+    OutputStream out = client.getOutputStream();
+    out.write(headerBytes);
+    out.write(bodyBytes);
+    out.flush();
+}
+```
+
+必要import:
+```java
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+```
+
+確認コマンド:
+```bash
+cd /Users/ktoyo/Documents/Web-under-the-hood/03-java-only-http-server
+javac src/Main.java
+java -cp src Main
+```
+
+別ターミナル:
+```bash
+curl -v http://localhost:8080/
+curl -v http://localhost:8080/hello
+curl -v http://localhost:8080/api/hello
+```
+
+確認ポイント:
+- サーバーログに `method=GET, path=/...` が出る
+- この段階ではどのpathでもレスポンスは固定（Step 5で分岐実装）
+
 完了条件:
 - サーバーログに `method` と `path` を出せる
 - `curl -v /hello` と `/api/hello` で path の違いがログに出る
@@ -193,6 +248,57 @@ curl -v http://localhost:8080/
 - `if` で `method` と `path` を分岐する
 - `Content-Type` を返却内容ごとに変える
 - `404` でも `Content-Length` を正しく付ける
+
+実装例（接続処理内の分岐イメージ）:
+```java
+String status;
+String contentType;
+String responseBody;
+
+if ("GET".equals(method) && "/".equals(path)) {
+    status = "200 OK";
+    contentType = "text/html; charset=UTF-8";
+    responseBody = "<h1>Welcome</h1><p>Top page</p>";
+} else if ("GET".equals(method) && "/hello".equals(path)) {
+    status = "200 OK";
+    contentType = "text/plain; charset=UTF-8";
+    responseBody = "Hello World";
+} else if ("GET".equals(method) && "/api/hello".equals(path)) {
+    status = "200 OK";
+    contentType = "application/json; charset=UTF-8";
+    responseBody = "{\"message\":\"Hello API\"}";
+} else {
+    status = "404 Not Found";
+    contentType = "text/plain; charset=UTF-8";
+    responseBody = "Not Found";
+}
+
+byte[] bodyBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+String headers =
+        "HTTP/1.1 " + status + "\r\n" +
+        "Content-Type: " + contentType + "\r\n" +
+        "Content-Length: " + bodyBytes.length + "\r\n" +
+        "Connection: close\r\n" +
+        "\r\n";
+
+out.write(headers.getBytes(StandardCharsets.UTF_8));
+out.write(bodyBytes);
+out.flush();
+```
+
+確認コマンド:
+```bash
+curl -v http://localhost:8080/
+curl -v http://localhost:8080/hello
+curl -v http://localhost:8080/api/hello
+curl -v http://localhost:8080/notfound
+```
+
+確認ポイント:
+- `/` は `200` + `Content-Type: text/html`
+- `/hello` は `200` + `Content-Type: text/plain`
+- `/api/hello` は `200` + `Content-Type: application/json`
+- `/notfound` は `404 Not Found`
 
 完了条件:
 - 次の4つの結果が期待どおりになる

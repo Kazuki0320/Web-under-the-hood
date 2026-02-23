@@ -177,6 +177,48 @@ jstack -l -e <pid>
 jstack -l <pid> > jstack_$(date +%Y%m%d_%H%M%S).txt
 ```
 
+## 12. 追加Q&A（通信の挙動）
+
+### Q1. `Connection reset by peer`（RST）とは？
+
+- `RST` は TCP の `Reset`（強制切断）フラグ。
+- 意味は「この接続を今すぐ無効化する」。
+- `FIN` の通常終了より強い切断で、異常/拒否寄りの終了として扱われる。
+
+よくある発生ケース:
+- 相手プロセスが想定外状態で接続を即切断した
+- そのポートで待受していないのにパケットが来た
+- アプリが未読データを残したままソケットを閉じた
+
+`Connection reset by peer` は「相手側からRSTを受けた」という意味。
+
+### Q2. `java -cp src Main` と `curl` は同じ実行ファイル？
+
+- 同じではない。
+- `java -cp src Main`: `Main.class` でサーバープロセスを起動
+- `curl -v http://localhost:8080`: `curl` という別のクライアントプロセスを起動
+
+同じPC上で「サーバー（Main）」と「クライアント（curl）」の2プロセスがTCP通信している。
+
+### Q3. `\r\n` の `\r` は何？
+
+- `\r` は carriage return（復帰）
+- `\n` は line feed（改行）
+- HTTPヘッダーは仕様上、行末を `\r\n` で区切る
+- `\r\n\r\n`（空行）でヘッダー終了を表す
+
+### Q4. `OutputStream out = client.getOutputStream();` はどこに通じる？
+
+- `client = server.accept()` で、`curl` との1接続を表す `Socket` を得る
+- `client.getOutputStream()` はその接続の「サーバー -> クライアント」送信口
+- `out.write(headerBytes)` がレスポンスヘッダーとして `curl -v` に表示される
+- `out.write(bodyBytes)` がレスポンス本文として `curl` に表示される
+- `out.flush()` でOSへ送信を確定する
+
+対応関係:
+- Java `out.write(headerBytes)` -> `curl -v` の `< HTTP/1.1 ...` と `< Content-* ...`
+- Java `out.write(bodyBytes)` -> `curl` の本文表示
+
 ## 用語メモ
 
 - 輻輳制御: `ふくそうせいぎょ`
