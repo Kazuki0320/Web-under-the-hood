@@ -322,6 +322,40 @@ TCP接続は次の4つ組で識別される:
 - ソケット実体はOSのカーネル空間（ネットワークスタック管理領域）に作られる。
 - Javaプロセスは、そのソケットを参照するファイルディスクリプタを持って操作する。
 
+構成図（JVMからOSへ依頼される流れ）:
+
+```mermaid
+flowchart LR
+  subgraph USER["User Space"]
+    APP["Main.java"]
+    JVM["JVM / Java runtime"]
+    SS["new ServerSocket(8080)"]
+  end
+
+  subgraph KERNEL["Kernel Space"]
+    SYS["System call boundary"]
+    SOCK["socket()"]
+    BIND["bind(localIP:8080)"]
+    LISTEN["listen(backlog)"]
+    QUEUE["accept queue"]
+    ACCEPT["accept() -> connected socket fd"]
+  end
+
+  CLIENT["Client (curl/browser)"] -->|connect| QUEUE
+
+  APP --> SS
+  SS --> JVM
+  JVM -->|syscall| SYS
+  SYS --> SOCK
+  SOCK --> BIND
+  BIND --> LISTEN
+  LISTEN --> QUEUE
+  JVM -->|syscall| ACCEPT
+  QUEUE --> ACCEPT
+  ACCEPT -->|returns fd| JVM
+  JVM --> APP
+```
+
 ### Q3. `bind`（指定ポートにバインド）とは？
 
 - 「このソケットにローカルIP:ポートを割り当てる」操作。
@@ -352,6 +386,86 @@ TCP接続は次の4つ組で識別される:
 
 ポイント:
 - 本文だけでなく `Content-Type` と `Content-Length` の整合が表示品質に直結する。
+
+## 16. 追加Q&A（fdとOS内部の流れ）
+
+### Q1. `fd` とは何？
+
+- `fd` は `file descriptor`（ファイルディスクリプタ）の略。
+- OSがプロセスに渡す「開いている対象（ファイル/ソケットなど）への番号付きハンドル」。
+- `socket()` の戻り値も `fd` で、この番号を使って `bind/listen/accept/read/write/close` を行う。
+
+### Q2. OS上で「connectできるポート」を作る流れ（fd視点）
+
+1. JVMが `socket()` を呼ぶ。
+2. カーネルがソケットオブジェクトを作る。
+3. カーネルがそのソケットをプロセスのFDテーブルに登録し、`fd` を返す。
+4. JVMが `bind(fd, localIP:port)` を呼ぶ（例: `:8080`）。
+5. カーネルが「このポート宛はこのソケットへ」の対応を作る。
+6. JVMが `listen(fd, backlog)` を呼ぶ。
+7. カーネルがソケットを `LISTEN` 状態にして接続待ちキューを有効化する。
+8. クライアントが `connect(serverIP:port)` を実行する。
+9. カーネルがTCP 3-way handshakeを完了し、接続をacceptキューに入れる。
+10. JVMが `accept(fd)` を呼ぶ。
+11. カーネルが接続済みソケット用の新しい `fd` を返す。
+12. JVMはその接続用 `fd` で `read/write` し、終了時に `close(fd)` で解放する。
+
+### Q3. 「`ServerSocket`は待受専用、`Socket`は接続ごとの送受信用」とは？
+
+- `ServerSocket`
+  - 役割: 待受専用の受付窓口
+  - 使う操作: `accept()` で接続を受ける
+  - データ本体の読み書きはしない
+
+- `Socket`（`accept()` が返す）
+  - 役割: 1接続専用の通信路
+  - 使う操作: `getInputStream()` / `getOutputStream()` で送受信する
+
+イメージ:
+- `ServerSocket` = 店の受付
+- `Socket` = 受付後に案内される個室（1組ごと）
+
+### Q4. TCP 3-way handshake は acceptキューの時に発生する？
+
+- 正確には「acceptキューの前段」で発生する。
+- 流れ:
+1. クライアントが `SYN` を送る
+2. サーバーが `SYN/ACK` を返す
+3. クライアントが `ACK` を返す
+4. 接続確立後、カーネルが接続をacceptキューに入れる
+5. `accept()` がその接続を取り出す
+
+### Q5. `RST` とは何？
+
+- `RST` はTCPの `Reset` フラグ。
+- 意味は「接続を即時に強制終了する」。
+- `FIN` は通常の終了、`RST` は異常/拒否時の即時終了。
+- `Connection reset by peer` は「相手側から `RST` を受けて切断された」という意味。
+
+## 17. 追加Q&A（わかりづらかった点の言い換え）
+
+### Q1. `Accepted: /[::1]:63183` はどう読む？
+
+- この表示は `client.getRemoteSocketAddress()` の値。
+- `remote` は「相手側（クライアント側）」の意味。
+- `::1` は相手のIP（localhostのIPv6）
+- `63183` は相手の一時ポート（ephemeral port）
+
+接続全体で書くと:
+- `::1:63183 -> ::1:8080`
+- 左がクライアント、右がサーバー
+
+### Q2. なぜサーバーポートとクライアント一時ポートの両方が必要？
+
+わかりやすい説明:
+- サーバーポート（8080）は「店の住所」
+- クライアント一時ポート（63183）は「お客さんの整理番号」
+
+サーバーは受付（8080）だけで受信できるが、返信時には「どのお客さんに返すか」を区別する必要がある。  
+そのためクライアント側にも一時ポートが必要になる。
+
+実務での正確な言い方:
+- 接続は `clientIP/clientPort/serverIP/serverPort`（4タプル）で識別される。
 
 ## 用語メモ
 
