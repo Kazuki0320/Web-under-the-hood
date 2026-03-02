@@ -19,3 +19,11 @@
     - `jcmd <pid> VM.version` / `jcmd <pid> VM.system_properties` で実行環境を確認する
     - `lsof -nP -iTCP:8080 -sTCP:LISTEN` と突き合わせて、JVM側とOS側の見え方を対応づける
     - `jcmd <pid> GC.heap_info` などの基本メトリクスを取り、メモリ観測の入口を作る
+
+- Dockerネットワーク観測を行う（今後追加）
+  - 目的: Docker特有の通信レイヤー（port mapping/NAT/bridge/サービス名解決）を切り分けて説明できるようにする
+  - 最小ステップ:
+    - `localhost -> Docker公開ポート -> 前段サーバー -> バックエンド` の経路を観測し、到達順序を確認する
+    - `docker inspect` と `docker network inspect` でIP/ネットワーク接続を確認する
+    - `ss` / `tcpdump` で待ち受けと実パケットを確認し、設定との差分を特定する
+    - 障害パターン（サービス名不一致・network未参加・port不一致）を再現し、失敗ポイントを記録する

@@ -1,4 +1,4 @@
-# 04-apache-vs-nginx
+# 05-apache-vs-nginx
 
 ## 概要
 03で作った同一バックエンド（自作Java HTTPサーバー）に対して、  
@@ -60,4 +60,4 @@ flowchart LR
 - どちらも「前段として成立する」ことの確認
 
 ## 次にやるなら
-- 05でネットワーク観測を行い、実際の経路と障害切り分けを身につける
+- Dockerネットワーク観測（NAT/bridge/名前解決）は、`LEARNING_TASKS.md` の今後タスクとして進める

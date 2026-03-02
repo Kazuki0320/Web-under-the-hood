@@ -25,8 +25,8 @@
 - 01-static-web-nginx/
 - 02-java-servlet-tomcat/
 - 03-java-only-http-server/
-- 04-apache-vs-nginx/
-- 05-network-observation/
+- 04-wireshark-local-http/
+- 05-apache-vs-nginx/
 
 ---
 
@@ -47,7 +47,7 @@
   - Webアプリは「ブラウザに表示される」までに複数の責務が連携しているため、1つずつ分解して理解しないと、障害時にどこが壊れているか判断できないから。
 
 - なぜこの設計なのか？
-  - 静的配信（Nginx） -> Java実行（Tomcat/Servlet） -> 前段/後段分離 -> 通信観測、という順にすると、実務構成を小さく再現しながら責務を段階的に理解できるから。
+  - 静的配信（Nginx） -> Java実行（Tomcat/Servlet） -> 最小HTTP実装 -> パケット観測 -> 前段/後段分離 -> Docker通信観測、という順にすると、責務を段階的に理解しやすいから。
 
 - なぜ他の方法ではダメなのか？
   - 最初からSpring Bootやマネージド環境だけを触ると、便利機能に隠れてHTTP・ルーティング・プロキシ・ポート公開の実体が見えにくく、応用時の説明力と切り分け力が育ちにくいから。
