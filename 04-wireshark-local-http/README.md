@@ -15,6 +15,12 @@ WiresharkでTCP/HTTP通信の全体像を観測する。
 - Wireshark
 - `nc`（netcat）
 
+## 関連ドキュメント
+- 実行手順: `SETUP_STEPS.md`
+- `nc`実行から切断までの時系列: `FLOW_NC_TO_CLOSE.md`
+- TCPクライアント/HTTPクライアントとレイヤー整理: `LAYERS_AND_CLIENTS.md`
+- Wireshark確認ポイント（正常系/異常系）: `WIRESHARK_CHECKPOINTS.md`
+
 ## 前提
 - `03-java-only-http-server` が動作していること
 - ここではDockerを使わない

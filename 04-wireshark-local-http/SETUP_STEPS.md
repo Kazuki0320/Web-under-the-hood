@@ -173,6 +173,8 @@ Connection: close
 - `nc`上でHTTPレスポンス（`HTTP/1.1 200 ...`）が返る
 - 04サーバーログに `method` / `path` が出る
 
+
+”TCPが“ソケットを使って接続（3-way handshake）を確立したときに通信がスタートする”
 ---
 
 ## Step 5: パケットを読み解く
