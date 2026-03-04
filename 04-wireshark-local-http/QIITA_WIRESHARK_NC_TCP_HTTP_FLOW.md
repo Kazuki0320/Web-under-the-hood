@@ -11,15 +11,36 @@
 - 障害切り分けの基礎（200/404/RST）を実験で掴みたい人
 
 ## 完成イメージ
+
 ```mermaid
-flowchart LR
-    N["nc 127.0.0.1 8080"] -->|"SYN"| L["Loopback lo0"]
-    L -->|"SYN"| J["Java ServerSocket :8080"]
-    J -->|"SYN,ACK"| L
-    L -->|"ACK"| N
-    N -->|"PSH,ACK\nGET /hello"| J
-    J -->|"PSH,ACK\nHTTP/1.1 200 OK"| N
-    J -->|"FIN,ACK"| N
+sequenceDiagram
+    participant N as nc (client)
+    participant L as loopback lo0
+    participant J as Java ServerSocket:8080
+
+    rect rgb(230,245,255)
+    Note over N,J: TCP 3-way handshake
+    N->>L: SYN
+    L->>J: SYN
+    J-->>L: SYN,ACK
+    L-->>N: SYN,ACK
+    N->>L: ACK
+    L->>J: ACK
+    end
+
+    rect rgb(235,255,235)
+    Note over N,J: HTTP request / response
+    N->>L: PSH,ACK GET /hello
+    L->>J: PSH,ACK GET /hello
+    J-->>L: PSH,ACK HTTP/1.1 200 OK
+    L-->>N: PSH,ACK HTTP/1.1 200 OK
+    end
+
+    rect rgb(255,240,235)
+    Note over N,J: Connection close
+    J-->>L: FIN,ACK
+    L-->>N: FIN,ACK
+    end
 ```
 
 ## 使用技術
