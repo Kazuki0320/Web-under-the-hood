@@ -29,7 +29,7 @@ brew install --cask wireshark
 
 コマンド:
 ```bash
-cd /Users/ktoyo/Documents/Web-under-the-hood/04-wireshark-local-http
+cd 04-wireshark-local-http
 mkdir -p src
 ```
 
@@ -123,7 +123,7 @@ javac src/Main.java
 
 コマンド:
 ```bash
-cd /Users/ktoyo/Documents/Web-under-the-hood/04-wireshark-local-http
+cd 04-wireshark-local-http
 java -cp src Main
 ```
 
