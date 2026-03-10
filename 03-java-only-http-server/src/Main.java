@@ -22,7 +22,7 @@ public class Main {
 
         try (ServerSocket server = new ServerSocket(port)) {
             System.out.println("Server listening on port " + port);
-             while (true) {
+              while (true) {
                 try (Socket client = server.accept()) {
                     System.out.println("Accepted: " + client.getRemoteSocketAddress());
 
