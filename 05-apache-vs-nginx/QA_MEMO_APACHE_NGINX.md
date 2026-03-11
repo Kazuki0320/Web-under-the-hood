@@ -107,3 +107,136 @@ kill <PID>
 - 戻り値は「数値（バイト数）」ではなく「実際に送信するバイト列」。
 - バイト数が必要な場合は、その配列の `length` を使う（例: `bodyBytes.length`）。
 - HTTPレスポンスでは `Content-Length` に `bodyBytes.length` を設定するために使う。
+
+## 5. Nginx / Apache プロキシ設定
+
+### 5-1. Nginxのリバースプロキシはどこにつながる？
+疑問点:
+- 「`location /api/` の転送先はどこ？」
+
+こういう意味らしい:
+- `proxy_pass http://backend_nginx:8080/;` なので、Composeネットワーク内の `backend_nginx` サービスへ転送する。
+- 例: `GET /api/hello` はバックエンド側に `/hello` として渡る（`proxy_pass` 末尾 `/` のため）。
+
+### 5-2. `proxy_pass` とは？
+疑問点:
+- 「`proxy_pass` は何？」
+
+こういう意味らしい:
+- Nginxで「このリクエストをどの上流サーバーへ中継するか」を指定するディレクティブ。
+- `location` にマッチしたリクエストを、指定先（例: `backend_nginx:8080`）へ転送してレスポンスを返す。
+- 末尾 `/` の有無でパス変換の挙動が変わるため注意が必要。
+
+### 5-4. Apacheの `httpd.conf` は何をしている？
+疑問点:
+- 「Apache側のconf設定の意味は？」
+
+こういう意味らしい:
+- `ServerName localhost` / `Listen 80`: Apacheの基本設定（コンテナ内80番待受）。
+- `LoadModule ...`: 必要モジュールを有効化。特に `mod_proxy` / `mod_proxy_http` / `mod_headers` が重要。
+- `ErrorLog` / `CustomLog`: コンテナ標準出力・標準エラーへログを出す設定。
+- `ProxyPreserveHost On`: 元の `Host` ヘッダーをバックエンドへ引き継ぐ。
+- `RequestHeader set X-Forwarded-Proto \"http\"`: 元スキーム情報をバックエンドへ渡す。
+- `ProxyPass \"/api/\" \"http://backend_apache:8080/\"`: `/api/` をバックエンドへ中継。
+- `ProxyPassReverse ...`: バックエンド由来の戻り先URL（`Location` など）を整合する。
+
+### 5-5. なぜApacheからNginx利用が増えた？
+疑問点:
+- 「なぜ前段でNginxを使うケースが増えたのか？」
+
+こういう意味らしい:
+- 高同時接続時に、Nginxのイベント駆動モデルは少ないプロセスで捌きやすく、前段用途で効率が出やすい。
+- リバースプロキシ、SSL終端、静的配信、ロードバランスをシンプルにまとめやすい。
+- クラウド/コンテナ環境で軽量な入口として運用しやすく、採用が広がった。
+- 実務では「Apache資産は残しつつ入口はNginx」という移行パターンが増えた。
+- これはApacheが不要になったというより、システム構成の重心が前段プロキシ中心へ移った影響が大きい。
+
+### 5-6. 8080/8083 と内部転送の流れ（図と説明）
+疑問点:
+- 「この構成で、リクエストはどの順番で流れる？」
+
+こういう意味らしい:
+```mermaid
+flowchart LR
+    U["Browser / curl"]
+
+    subgraph HOST["Host (your machine)"]
+      P1["localhost:8080"]
+      P2["localhost:8083"]
+    end
+
+    subgraph NET["Docker Network"]
+      N["nginx container :80"]
+      A["apache container :80"]
+      BN["backend_nginx :8080"]
+      BA["backend_apache :8080"]
+    end
+
+    U --> P1 --> N --> BN
+    U --> P2 --> A --> BA
+```
+
+- ブラウザ（または`curl`）から、ホストの`localhost:8080`または`localhost:8083`にアクセスする。
+- `localhost:8080`に来たリクエストは、Docker内の`nginx`コンテナ（`:80`）に入る。
+- `nginx`はそのリクエストを`backend_nginx:8080`へ中継する。
+- `localhost:8083`に来たリクエストは、Docker内の`apache`コンテナ（`:80`）に入る。
+- `apache`はそのリクエストを`backend_apache:8080`へ中継する。
+- つまり入口は2つ（8080/8083）だが、最終的にはそれぞれのバックエンド（8080）で処理する。
+
+
+## 実行ログ要約（重要情報は省略）
+以下は `docker compose logs --tail=100` で確認した結果の要約です。
+
+- `nginx`:
+  - エントリポイントの初期化が実行され、起動完了ログ（`ready for start up`）を確認。
+  - `default.conf` が読み取り専用のため、起動スクリプトの自動書き換えはスキップされるが、起動自体は正常。
+  - `GET /` で `200`、`GET /api/hello` で `200` がアクセスログに出力され、`/api` は末尾スラッシュ補正で `301` を確認。
+
+- `backend_nginx`:
+  - `Server listening on port: 8080` を確認（待受開始）。
+
+- `apache`:
+  - `httpd -D FOREGROUND` で通常起動ログを確認。
+  - アクセスログ書式の表示は今後整える余地あり（`combined` 出力がそのまま見えている状態）。
+
+- `backend_apache`:
+  - `Server listening on port: 8080` を確認（待受開始）。
+
+## ここまでの実装追加分（後半追記）
+- `nginx/default.conf` を実装:
+  - `/` は固定 `200`
+  - `/api/` は `backend_nginx:8080` へ `proxy_pass`
+  - `Host` / `X-Forwarded-For` / `X-Forwarded-Proto` を転送
+
+- `apache/httpd.conf` を実装:
+  - `mod_proxy` / `mod_proxy_http` / `mod_headers` を有効化
+  - `ProxyPass` / `ProxyPassReverse` で `/api/` を `backend_apache:8080` へ中継
+  - コンテナ向けに標準出力・標準エラーへログ出力設定
+
+- `docker-compose.yml` を修正:
+  - サービス名不整合を修正（`backend_apache`）
+  - `apache` に `8083:80` を公開
+  - `depends_on` とプロキシ先の整合を統一
+
+- `backend-apache` 側も実行可能に修正:
+  - `src/Main.java` の待受ポートを `8080` に統一
+  - `Dockerfile` の `CMD` を `java -cp src Main` に修正
+
+## 比較表（今回の実装ベース）
+
+| 比較ポイント | Nginx（今回） | Apache（今回） | 見るべきファイル |
+|---|---|---|---|
+| ホスト公開ポート | `8080:80` | `8083:80` | `docker-compose.yml` |
+| プロキシ設定の書き方 | `location /api/` + `proxy_pass` | `ProxyPass` + `ProxyPassReverse` | `nginx/default.conf`, `apache/httpd.conf` |
+| `/` への応答 | Nginxが固定 `200` を直接返す | 今回は`/api/`のみ中継対象 | `nginx/default.conf` |
+| `/api/hello` の中継先 | `backend_nginx:8080` | `backend_apache:8080` | 各conf |
+| ヘッダー転送 | `proxy_set_header` で明示 | `ProxyPreserveHost` + `RequestHeader` | 各conf |
+| 起動に必要な注意点 | `default.conf` のマウント先が正しいか | `mod_proxy` / `mod_proxy_http` 読み込みがあるか | 各conf |
+| バックエンド実装 | Java最小HTTPサーバー（`GET /hello`のみ200） | 同じ実装を別サービスで起動 | `backend-nginx/src/Main.java`, `backend-apache/src/Main.java` |
+
+
+### まずはここだけ確認すればOK（最短チェック）
+1. `curl -i http://localhost:8080/api/hello` が `200` になる（Nginx経由）。
+2. `curl -i http://localhost:8083/api/hello` が `200` になる（Apache経由）。
+3. `curl -i http://localhost:8080/api/notfound` と `:8083/api/notfound` が `404` になる。
+4. `docker compose logs --tail=100 backend_nginx backend_apache` で到達ログを確認する。

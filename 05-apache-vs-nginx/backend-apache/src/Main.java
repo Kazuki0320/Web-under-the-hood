@@ -8,7 +8,7 @@ import java.io.IOException;
 
 public class Main {
 	public static void main(String[] args) {
-		int port = 8083;
+		int port = 8080;
 
 		try (ServerSocket server = new ServerSocket(port)) {
 			System.out.println("Server listening on port: " + port);

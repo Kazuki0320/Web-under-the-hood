@@ -4,10 +4,10 @@ services:
       context: ./backend-nginx
     container_name: wuth-backend-nginx
 
-  backend_appache:
+  backend_apache:
     build:
       context: ./backend-apache
-    container_name : wuth-backend-apache
+    container_name: wuth-backend-apache
 
   nginx:
     image: nginx:1.27-alpine
@@ -24,5 +24,7 @@ services:
     container_name: wuth-apache
     depends_on:
       - backend_apache
+    ports:
+      - "8083:80"
     volumes:
       - ./apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
