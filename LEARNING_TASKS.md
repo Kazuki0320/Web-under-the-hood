@@ -43,3 +43,28 @@
     - `docker inspect` と `docker network inspect` でIP/ネットワーク接続を確認する
     - `ss` / `tcpdump` で待ち受けと実パケットを確認し、設定との差分を特定する
     - 障害パターン（サービス名不一致・network未参加・port不一致）を再現し、失敗ポイントを記録する
+
+- CORS制約とプリフライトを最小構成で検証する
+  - 目的: ブラウザの同一オリジン制約とCORSヘッダー、プリフライトの発生条件を実装ベースで理解する
+  - 最小ステップ:
+    - FE（`http://localhost:5173`）とBE（`http://localhost:3000`）の別オリジン最小アプリを作る
+    - `GET /hello` でシンプルリクエストを通し、`Access-Control-Allow-Origin` の効果を確認する
+    - `POST /echo` + `Content-Type: application/json` + `X-Test` でプリフライト（`OPTIONS`）発生を確認する
+    - `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` / Origin不一致の失敗パターンを再現して記録する
+    - `credentials: include` と `Access-Control-Allow-Credentials: true` の組み合わせを検証し、`Allow-Origin: *` と併用不可を確認する
+    - 最後に「発生条件・必要ヘッダー・失敗時の見分け方」を1枚にまとめる
+
+## 次の勉強題材メモ（Build your own系）
+
+- Webアプリのレイヤーを1段ずつ自作する流れで進める
+  - ねらい: フレームワーク理解を深めるために、小さいフレームワークを自分で作る
+
+- 推奨順序（現時点）
+  - 1. Routerを作る（`URL -> Controller`、`Map<String, Handler>`）
+  - 2. ミニMVC（Dispatcher -> Router -> Controller -> Service -> Repository）
+  - 3. JSONシリアライザ（Java Object -> JSON）
+  - 4. 自作DIコンテナ（Reflectionで依存注入）
+
+
+- 参考学習スタイル
+  - Build your own X 系プロジェクトを題材に、段階的に実装して理解を深める
