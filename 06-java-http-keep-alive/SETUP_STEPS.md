@@ -28,6 +28,51 @@ ls -la src
 - `accept()` 後に固定レスポンスを返して一旦 close
 - `javac` と `curl -v` で基本疎通を確認
 
+実装例（`src/Main.java`）:
+```java
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+    private static final int PORT = 8080;
+
+    public static void main(String[] args) {
+        String body = "Hello World";
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+
+        String headers =
+            "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: text/plain; charset=UTF-8\r\n" +
+            "Content-Length: " + bodyBytes.length + "\r\n" +
+            "Connection: close\r\n" +
+            "\r\n";
+        byte[] headerBytes = headers.getBytes(StandardCharsets.UTF_8);
+
+        try (ServerSocket server = new ServerSocket(PORT)) {
+            System.out.println("Server listening on port " + PORT);
+
+            while (true) {
+                try (Socket client = server.accept()) {
+                    System.out.println("Accepted: " + client.getRemoteSocketAddress());
+
+                    OutputStream out = client.getOutputStream();
+                    out.write(headerBytes);
+                    out.write(bodyBytes);
+                    out.flush();
+                } catch (IOException e) {
+                    System.err.println("Failed to handle client: " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to start server: " + e.getMessage());
+        }
+    }
+}
+```
+
 確認コマンド:
 ```bash
 cd /Users/ktoyo/Documents/Web-under-the-hood/06-java-http-keep-alive
