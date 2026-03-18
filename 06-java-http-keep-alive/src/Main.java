@@ -10,13 +10,17 @@ import java.util.Map;
 
 public class Main {
     private static final int PORT = 8080;
+    // 接続がアイドル状態でこの時間を超えたら読み取りをタイムアウトさせる
     private static final int IDLE_TIMEOUT_MS = 5000;
+    // 1つのTCP接続で受け付ける最大リクエスト数
     private static final int MAX_REQUESTS_PER_CONNECTION = 5;
 
     public static void main(String[] args) {
+        // サーバーソケットを作成して待ち受け開始
         try (ServerSocket server = new ServerSocket(PORT)) {
             System.out.println("Server listening on port " + PORT);
             while (true) {
+                // クライアント接続を1つ受け付ける
                 try (Socket client = server.accept()) {
                     System.out.println("Accepted: " + client.getRemoteSocketAddress());
                     handleConnection(client);
@@ -30,6 +34,7 @@ public class Main {
     }
 
     private static void handleConnection(Socket client) throws IOException {
+        // 同一接続が長く遊ばないようにタイムアウト設定
         client.setSoTimeout(IDLE_TIMEOUT_MS);
         BufferedReader reader = new BufferedReader(
             new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8)
@@ -37,9 +42,11 @@ public class Main {
         OutputStream out = client.getOutputStream();
         int requestCount = 0;
 
+        // keep-alive: 同じTCP接続で複数リクエストを順番に処理
         while (requestCount < MAX_REQUESTS_PER_CONNECTION) {
             String requestLine = reader.readLine();
             if (requestLine == null || requestLine.isEmpty()) {
+                // 接続終了 or 不正/空リクエスト
                 break;
             }
             requestCount++;
@@ -48,6 +55,7 @@ public class Main {
             String method = parts.length > 0 ? parts[0] : "";
             String path = parts.length > 1 ? parts[1] : "";
 
+            // ヘッダーを空行まで読み取ってMapに格納する
             Map<String, String> headers = new HashMap<>();
             String line;
             while ((line = reader.readLine()) != null && !line.isEmpty()) {
@@ -59,6 +67,7 @@ public class Main {
                 }
             }
 
+            // クライアントが close を要求したらこのレスポンス後に切断する
             boolean closeConnection = "close".equalsIgnoreCase(headers.getOrDefault("connection", ""));
 
             String status;
@@ -79,6 +88,7 @@ public class Main {
                 "Connection: " + (closeConnection ? "close" : "keep-alive") + "\r\n" +
                 "\r\n";
 
+            // HTTPレスポンスを「ヘッダー -> 本文」の順に返す
             out.write(responseHeaders.getBytes(StandardCharsets.UTF_8));
             out.write(bodyBytes);
             out.flush();
