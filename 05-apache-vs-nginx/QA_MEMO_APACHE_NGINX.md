@@ -184,44 +184,6 @@ flowchart LR
 - つまり入口は2つ（8080/8083）だが、最終的にはそれぞれのバックエンド（8080）で処理する。
 
 
-## 実行ログ要約（重要情報は省略）
-以下は `docker compose logs --tail=100` で確認した結果の要約です。
-
-- `nginx`:
-  - エントリポイントの初期化が実行され、起動完了ログ（`ready for start up`）を確認。
-  - `default.conf` が読み取り専用のため、起動スクリプトの自動書き換えはスキップされるが、起動自体は正常。
-  - `GET /` で `200`、`GET /api/hello` で `200` がアクセスログに出力され、`/api` は末尾スラッシュ補正で `301` を確認。
-
-- `backend_nginx`:
-  - `Server listening on port: 8080` を確認（待受開始）。
-
-- `apache`:
-  - `httpd -D FOREGROUND` で通常起動ログを確認。
-  - アクセスログ書式の表示は今後整える余地あり（`combined` 出力がそのまま見えている状態）。
-
-- `backend_apache`:
-  - `Server listening on port: 8080` を確認（待受開始）。
-
-## ここまでの実装追加分（後半追記）
-- `nginx/default.conf` を実装:
-  - `/` は固定 `200`
-  - `/api/` は `backend_nginx:8080` へ `proxy_pass`
-  - `Host` / `X-Forwarded-For` / `X-Forwarded-Proto` を転送
-
-- `apache/httpd.conf` を実装:
-  - `mod_proxy` / `mod_proxy_http` / `mod_headers` を有効化
-  - `ProxyPass` / `ProxyPassReverse` で `/api/` を `backend_apache:8080` へ中継
-  - コンテナ向けに標準出力・標準エラーへログ出力設定
-
-- `docker-compose.yml` を修正:
-  - サービス名不整合を修正（`backend_apache`）
-  - `apache` に `8083:80` を公開
-  - `depends_on` とプロキシ先の整合を統一
-
-- `backend-apache` 側も実行可能に修正:
-  - `src/Main.java` の待受ポートを `8080` に統一
-  - `Dockerfile` の `CMD` を `java -cp src Main` に修正
-
 ## 比較表（今回の実装ベース）
 
 | 比較ポイント | Nginx（今回） | Apache（今回） | 見るべきファイル |
@@ -235,8 +197,3 @@ flowchart LR
 | バックエンド実装 | Java最小HTTPサーバー（`GET /hello`のみ200） | 同じ実装を別サービスで起動 | `backend-nginx/src/Main.java`, `backend-apache/src/Main.java` |
 
 
-### まずはここだけ確認すればOK（最短チェック）
-1. `curl -i http://localhost:8080/api/hello` が `200` になる（Nginx経由）。
-2. `curl -i http://localhost:8083/api/hello` が `200` になる（Apache経由）。
-3. `curl -i http://localhost:8080/api/notfound` と `:8083/api/notfound` が `404` になる。
-4. `docker compose logs --tail=100 backend_nginx backend_apache` で到達ログを確認する。
