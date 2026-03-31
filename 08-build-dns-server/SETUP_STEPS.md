@@ -11,7 +11,7 @@
 
 コマンド:
 ```bash
-cd /Users/ktoyo/Documents/Web-under-the-hood/08-build-dns-server
+cd 08-build-dns-server
 mkdir -p src
 ```
 
@@ -137,7 +137,7 @@ public class Main {
 
 コマンド:
 ```bash
-cd /Users/ktoyo/Documents/Web-under-the-hood/08-build-dns-server
+cd 08-build-dns-server
 javac src/Main.java
 java -cp src Main
 ```
