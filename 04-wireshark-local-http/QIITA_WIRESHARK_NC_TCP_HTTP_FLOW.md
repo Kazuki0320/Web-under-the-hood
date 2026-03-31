@@ -54,10 +54,6 @@ sequenceDiagram
 まずは任意の作業ディレクトリに `src/Main.java` を置いて起動する。  
 このサンプルは「接続直後には返さず、HTTPリクエスト行とヘッダー終端を読んでから返す」構成。
 
-```bash
-javac src/Main.java
-java -cp src Main
-```
 
 `src/Main.java`（そのまま使用可）:
 
@@ -131,13 +127,19 @@ public class Main {
 }
 ```
 
+```bash
+javac src/Main.java
+java -cp src Main
+```
+
+
 ポイント:
 - `GET /hello` は `200 OK`
 - それ以外（例: `POST /hello`, `GET /notfound`）は `404 Not Found`
 
 このコードでしていること（ブロックごと）:
 
-1. 待受ポートの準備
+1.待受ポートの準備
 ```java
 int port = 8080;
 try (ServerSocket server = new ServerSocket(port)) {
@@ -145,7 +147,7 @@ try (ServerSocket server = new ServerSocket(port)) {
 - `8080`で待受ソケットを作る。
 - ここでサーバープロセスは接続待ち状態に入る。
 
-2. 接続ごとの処理ループ
+2.接続ごとの処理ループ
 ```java
 while (true) {
     try (Socket client = server.accept()) {
@@ -153,7 +155,7 @@ while (true) {
 - `accept()`は接続要求が来るまで待つ（ブロック）。
 - 接続成立後、そのクライアント専用`Socket`を受け取る。
 
-3. 受信ストリームを読みやすい形に変換
+3.受信ストリームを読みやすい形に変換
 ```java
 BufferedReader reader = new BufferedReader(
     new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8)
@@ -162,7 +164,7 @@ BufferedReader reader = new BufferedReader(
 - ソケットの生バイト入力をUTF-8文字列として読めるようにする。
 - `readLine()`でHTTPの1行ずつを読める状態を作る。
 
-4. リクエスト行を読む
+4.リクエスト行を読む
 ```java
 String requestLine = reader.readLine();
 if (requestLine == null || requestLine.isEmpty()) {
@@ -172,7 +174,7 @@ if (requestLine == null || requestLine.isEmpty()) {
 - 例: `GET /hello HTTP/1.1` を受信する。
 - 空入力や切断時は次の接続へ進む。
 
-5. ヘッダー終端まで読み進める
+5.ヘッダー終端まで読み進める
 ```java
 String line;
 while ((line = reader.readLine()) != null && !line.isEmpty()) {
@@ -181,7 +183,7 @@ while ((line = reader.readLine()) != null && !line.isEmpty()) {
 - 空行（CRLF CRLF）まで読み進める。
 - これでHTTPヘッダーの読み取り範囲を確定する。
 
-6. method/pathを取り出す
+6.method/pathを取り出す
 ```java
 String[] parts = requestLine.split(" ");
 String method = parts.length > 0 ? parts[0] : "";
@@ -191,7 +193,7 @@ System.out.println("method=" + method + ", path=" + path);
 - リクエスト行を空白で分割して、メソッドとパスを取り出す。
 - ログ出力して受信内容を確認する。
 
-7. ルーティングしてレスポンス内容を決める
+7.ルーティングしてレスポンス内容を決める
 ```java
 if ("GET".equals(method) && "/hello".equals(path)) {
     status = "200 OK";
@@ -204,7 +206,7 @@ if ("GET".equals(method) && "/hello".equals(path)) {
 - `GET /hello` のみ成功レスポンス。
 - それ以外は404に分岐する。
 
-8. HTTPレスポンスを組み立てる
+8.HTTPレスポンスを組み立てる
 ```java
 byte[] bodyBytes = responseBody.getBytes(StandardCharsets.UTF_8);
 String headers =
@@ -217,7 +219,7 @@ String headers =
 - ステータス行・ヘッダー・本文長を作る。
 - `Content-Length`は本文バイト数と一致させる。
 
-9. クライアントへ送信する
+9.クライアントへ送信する
 ```java
 OutputStream out = client.getOutputStream();
 out.write(headers.getBytes(StandardCharsets.UTF_8));
@@ -229,6 +231,7 @@ out.flush();
 
 ### 2. Wiresharkでキャプチャする
 
+![スクリーンショット 2026-03-04 22.42.19.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/2597943/fd9472b2-3191-42f3-a964-cb379d807ec0.png)
 - インターフェース: `Loopback: lo0`
 - 表示フィルタ: `tcp.port == 8080`
 
@@ -250,7 +253,6 @@ Host: localhost:8080
 Connection: close
 
 ```
-
 レスポンス例:
 
 ```http
@@ -266,6 +268,7 @@ Hello World
 
 `nc 127.0.0.1 8080` を実行した直後、HTTPが流れる前にTCP接続確立が行われる。
 
+
 順序:
 1. `SYN`（クライアント -> サーバー）  
    - 接続開始要求
@@ -274,7 +277,11 @@ Hello World
 3. `ACK`（クライアント -> サーバー）  
    - 応答を受け取ったことを伝えて接続確立
 
+![スクリーンショット 2026-03-04 22.46.54.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/2597943/051f43d3-caa9-4079-923b-5747a4bc924c.png)
+
 この3ステップが成立して初めて、HTTPリクエスト（`GET /hello HTTP/1.1`）が流れる。
+
+![スクリーンショット 2026-03-04 22.47.29.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/2597943/ce06fa30-e786-4f1c-85c8-8c121346e44e.png)
 
 ### 4. 正常系パケットを対応づける
 
@@ -297,8 +304,9 @@ Hello World
 GET /notfound HTTP/1.1
 Host: localhost:8080
 Connection: close
-
 ```
+
+![スクリーンショット 2026-03-04 22.54.44.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/2597943/b4085ae2-2e19-422f-969b-11bedb8a272b.png)
 
 期待結果:
 - `HTTP/1.1 404 Not Found`
@@ -311,6 +319,7 @@ Connection: close
 ```bash
 nc 127.0.0.1 8080
 ```
+![スクリーンショット 2026-03-04 22.53.32.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/2597943/a5d39f87-c65b-4044-b688-2738d898d583.png)
 
 Wiresharkでの典型:
 1. `SYN`
