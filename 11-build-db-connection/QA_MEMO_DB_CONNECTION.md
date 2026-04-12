@@ -364,3 +364,74 @@ flowchart TD
   - 変更を先に `-wal` ファイルへ追記し、後で本体DBへ反映する。
   - 読み取りと書き込みの並行性が上がりやすい。
 - 共通の目的は「異常終了時でもDB整合性を保つこと」。
+
+## Q26. 結局、DBはファイルなの？SQLでどう読んでいるの？
+
+疑問点:
+- 「DBってファイルなの？それをSQLでどうやって読み取っているの？」
+
+回答:
+- DBの実体は製品によって異なる。
+- SQLiteの場合は、DB実体が1つのファイル（例: `sample.db`）。
+- ただしアプリはファイルを直接解析せず、SQLiteエンジンへSQLを渡して読み取る。
+- 流れ:
+  1. JavaアプリがJDBC経由でSQLを渡す
+  2. SQLiteエンジンがSQLを解析・実行
+  3. `sample.db` の必要ページを読み出す
+  4. 結果を `ResultSet` として返す
+
+## Q27. MySQL（サーバープロセス + 複数データファイル）とSQLiteの違いは？
+
+疑問点:
+- 「MySQLのサーバープロセスと複数データファイルは、SQLiteと何が違うの？」
+
+回答:
+- 違いの本質は「DBエンジンがどこで動くか」。
+- SQLite:
+  - アプリ内ライブラリとして動作
+  - 1ファイルDBを直接扱う（サーバー不要）
+- MySQL:
+  - 独立したDBサーバープロセスが常駐
+  - アプリはTCPでサーバーに接続し、サーバーが複数データファイルを管理
+- 特性の比較:
+  - SQLite: 軽量、組み込み向け、単一ホスト用途に強い
+  - MySQL: 同時接続、運用機能、クライアント/サーバー構成に強い
+
+## Q28. なぜ DriverManager に JDBC ドライバ登録が必要？
+
+疑問点:
+- 「DriverManagerにはなぜJDBCドライバを登録する必要があるの？」
+
+回答:
+- `DriverManager` は接続要求の振り分け役で、`jdbc:sqlite:...` のようなURLに対応できるドライバを探して接続を作る。
+- そのため、対応ドライバが登録されていないと「どのドライバに処理を渡せばよいか」が分からない。
+- 結果として `getConnection(...)` が失敗し、`No suitable driver` になる。
+- つまり「登録」は、接続URLとドライバ実装を結びつけるために必要。
+
+構成図:
+```mermaid
+flowchart LR
+    A["App: DriverManager.getConnection('jdbc:sqlite:sample.db')"] --> B["DriverManager"]
+    B --> C{"登録済みドライバに URL 対応があるか？"}
+    C -- "ある" --> D["SQLite JDBC Driver"]
+    D --> E["Connection 作成"]
+    C -- "ない" --> F["No suitable driver"]
+```
+
+## Q29. そもそも JDBC ドライバって何？
+
+疑問点:
+- 「そもそもドライバって何？」
+
+回答:
+- JDBCドライバは、Javaの共通DB操作API（`Connection`, `PreparedStatement` など）を、各DB製品向けの実処理に変換する実装。
+- アプリはJDBC APIを呼ぶだけで、DBごとの違いはドライバが吸収する。
+- そのため同じJDBCコードでも、ドライバを差し替えることで別DBに接続できる。
+
+構成図:
+```mermaid
+flowchart LR
+    A["Java App"] --> B["JDBC API"]
+    B --> C["JDBC Driver (DBごとの実装)"]
+    C --> D["SQLite / MySQL / PostgreSQL"]
+```
