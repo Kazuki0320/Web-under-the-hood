@@ -282,3 +282,85 @@
   - `.quit`
 - 1行コマンド:
   - `sqlite3 sample.db "SELECT * FROM users;"`
+
+## Q23. `sqlite3 sample.db` でなぜDBに入れるの？
+
+疑問点:
+- 「`sqlite3 sample.db` で、なぜDBの中に入れるの？」
+
+回答:
+- `sqlite3` は SQLite 専用のCLIクライアントで、`sample.db` というDBファイルを直接開く。
+- SQLiteはサーバー型DB（MySQL/PostgreSQL）と違い、DB本体が1つのファイルに入っている。
+- そのため、CLIがファイルを読み書きし、SQL実行やテーブル確認をその場で行える。
+
+構成イメージ:
+```mermaid
+flowchart LR
+    U["User (Terminal)"] --> C["sqlite3 CLI"]
+    C --> F["sample.db (SQLite file)"]
+    F --> T["users table / rows"]
+```
+
+今回の実装との対応:
+- アプリ実行時:
+  - Javaアプリ -> JDBCドライバ -> `sample.db`
+- 手動確認時:
+  - `sqlite3` CLI -> `sample.db`
+- どちらも同じ `sample.db` を見ているため、アプリで保存したデータをCLIで確認できる。
+
+## Q24. 通信まわりと SQLite ファイル内部の動きは？
+
+疑問点:
+- 「通信まわりの話と、SQLite上でファイルがどう動くかを知りたい」
+
+回答:
+- SQLiteはサーバーDBと違い、TCPでDBサーバーへ通信しない。
+- 代わりに同一マシン内で、プロセスがSQLiteライブラリを通じてDBファイルを直接読み書きする。
+- ただし「プロセス内の呼び出し」は層として見ると通信に近い流れ（API呼び出し連鎖）になっている。
+
+通信（呼び出し連鎖）の構成図:
+```mermaid
+flowchart LR
+    A["Java App (Main/Repository)"] --> B["JDBC API (DriverManager/Connection)"]
+    B --> C["SQLite JDBC Driver"]
+    C --> D["SQLite Engine (native/lib)"]
+    D --> E["sample.db (file)"]
+```
+
+ポイント:
+- `DriverManager.getConnection("jdbc:sqlite:sample.db")` でドライバに処理が渡る。
+- ドライバがSQLiteエンジンを呼び出し、SQLを実行して結果を返す。
+- ここにDBサーバーとのネットワーク往復はない（ローカルI/O中心）。
+
+SQLiteファイル更新の構成図（概念）:
+```mermaid
+flowchart TD
+    Q["INSERT / SELECT"] --> L["Lock 制御"]
+    L --> J["Journal/WAL へ記録"]
+    J --> P["DBページ更新"]
+    P --> F["sample.db へ反映"]
+```
+
+ポイント:
+- 更新系（INSERT/UPDATE/DELETE）では、整合性のためにロックとジャーナル/WALを使う。
+- 障害時はジャーナル/WALを使って整合性を回復する。
+- 読み取り系（SELECT）は主にDBページを読み出し、必要に応じてキャッシュを利用する。
+
+補足（サーバーDBとの違い）:
+- MySQL/PostgreSQL: `App -> TCP -> DB Server -> Data File`
+- SQLite: `App -> SQLite Library -> Data File`
+
+## Q25. journal / WAL って何？
+
+疑問点:
+- 「journal / WAL って何？」
+
+回答:
+- どちらもSQLiteの整合性を守るための記録方式。
+- `journal`（ロールバックジャーナル）:
+  - 更新前データを一時ファイルへ退避してから本体を更新する。
+  - 途中で失敗した場合、退避情報を使って元に戻せる。
+- `WAL`（Write-Ahead Logging）:
+  - 変更を先に `-wal` ファイルへ追記し、後で本体DBへ反映する。
+  - 読み取りと書き込みの並行性が上がりやすい。
+- 共通の目的は「異常終了時でもDB整合性を保つこと」。
