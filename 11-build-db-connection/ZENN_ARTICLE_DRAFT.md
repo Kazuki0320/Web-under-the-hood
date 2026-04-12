@@ -215,6 +215,9 @@ sequenceDiagram
 - `journal`（ロールバックジャーナル）: 更新前を退避して失敗時に戻せる
 - `WAL`（Write-Ahead Logging）: 先に `-wal` へ追記して後で本体へ反映する
 
+公式ドキュメント（SQLite WAL）:  
+https://sqlite.org/wal.html
+
 ### Step 4. Serviceで業務ロジックを分ける（`src/service/UserService.java`）
 
 ```java
