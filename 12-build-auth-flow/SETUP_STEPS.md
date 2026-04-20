@@ -284,6 +284,164 @@ javac -cp src $(find src -name "*.java")
 
 ---
 
+## Step 8: `AuthController` にHTTP解析と最小ルーティングを実装する
+
+やること:
+- `Socket` からHTTPリクエスト行/ヘッダー/本文を読む
+- まずは `POST /login` と `GET /me` の入口だけ作る
+- このStepではService呼び出しの枠だけ整え、詳細ロジックは次Stepへ回す
+
+実装方針（最小）:
+1. `requestLine` を読む（空なら return）
+2. ヘッダーを `Map<String, String>` に取り込む
+3. `Content-Length` を見て本文を読む
+4. `method/path` でルーティングする
+5. `/login` と `/me` は仮レスポンス、その他は `404`
+6. 例外時は `500` を返す
+
+`src/controller/AuthController.java`（見本実装）:
+```java
+package controller;
+
+import service.AuthService;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+public class AuthController {
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    public void handle(Socket client) throws IOException {
+        try {
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8)
+            );
+
+            String requestLine = reader.readLine();
+            if (requestLine == null || requestLine.isEmpty()) {
+                return;
+            }
+
+            Map<String, String> headers = new HashMap<>();
+            String line;
+            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                int idx = line.indexOf(':');
+                if (idx > 0) {
+                    String key = line.substring(0, idx).trim().toLowerCase();
+                    String value = line.substring(idx + 1).trim();
+                    headers.put(key, value);
+                }
+            }
+
+            int contentLength = parseIntOrZero(headers.get("content-length"));
+            String requestBody = readBody(reader, contentLength);
+
+            String[] parts = requestLine.split(" ");
+            String method = parts.length > 0 ? parts[0] : "";
+            String path = parts.length > 1 ? parts[1] : "";
+
+            if ("POST".equals(method) && "/login".equals(path)) {
+                handleLogin(client, headers, requestBody);
+                return;
+            }
+
+            if ("GET".equals(method) && "/me".equals(path)) {
+                handleMe(client, headers);
+                return;
+            }
+
+            sendJson(client, "404 Not Found", "{\"error\":\"not found\"}");
+        } catch (Exception e) {
+            sendJson(client, "500 Internal Server Error", "{\"error\":\"internal server error\"}");
+        }
+    }
+
+    private void handleLogin(Socket client, Map<String, String> headers, String requestBody) throws IOException {
+        // Step 9 で authService.login(...) を呼ぶ
+        sendJson(client, "501 Not Implemented", "{\"error\":\"login not implemented\"}");
+    }
+
+    private void handleMe(Socket client, Map<String, String> headers) throws IOException {
+        // Step 9 で authService.me(...) を呼ぶ
+        sendJson(client, "501 Not Implemented", "{\"error\":\"me not implemented\"}");
+    }
+
+    private int parseIntOrZero(String value) {
+        try {
+            return value == null ? 0 : Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private String readBody(BufferedReader reader, int contentLength) throws IOException {
+        if (contentLength <= 0) {
+            return "";
+        }
+
+        char[] chars = new char[contentLength];
+        int read = 0;
+        while (read < contentLength) {
+            int n = reader.read(chars, read, contentLength - read);
+            if (n < 0) {
+                break;
+            }
+            read += n;
+        }
+        return new String(chars, 0, read);
+    }
+
+    private void sendJson(Socket client, String status, String body) throws IOException {
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        String headers =
+            "HTTP/1.1 " + status + "\r\n" +
+            "Content-Type: application/json; charset=UTF-8\r\n" +
+            "Content-Length: " + bodyBytes.length + "\r\n" +
+            "Connection: close\r\n" +
+            "\r\n";
+
+        OutputStream out = client.getOutputStream();
+        out.write(headers.getBytes(StandardCharsets.UTF_8));
+        out.write(bodyBytes);
+        out.flush();
+    }
+}
+```
+
+動作確認（このStepの期待）:
+```bash
+cd /Users/ktoyo/Documents/Web-under-the-hood/12-build-auth-flow
+javac -cp src $(find src -name "*.java")
+java -cp src Main
+
+# 別ターミナル
+curl -i -X POST http://127.0.0.1:8080/login
+curl -i http://127.0.0.1:8080/me
+curl -i http://127.0.0.1:8080/not-found
+```
+
+期待結果:
+- `/login`: `501 Not Implemented`
+- `/me`: `501 Not Implemented`
+- `/not-found`: `404 Not Found`
+
+完了条件:
+- `AuthController` 内でHTTP受信とルーティングができている
+- ルートごとの最低限レスポンスを返せる
+- Serviceの詳細実装を入れる準備が整っている
+
+---
+
 ## この章で押さえる学習ポイント
 
 1. 認証と認可の違い（今回は認証中心）
