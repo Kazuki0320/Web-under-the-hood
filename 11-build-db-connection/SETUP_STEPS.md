@@ -45,27 +45,22 @@ touch src/db/Database.java
 
 ---
 
-## Step 2: JDBCドライバと依存ライブラリを準備する
+## Step 2: JDBCドライバを準備する
 
 やること:
 - `sqlite-jdbc` を `lib/` に配置する
-- `sqlite-jdbc` が要求する `slf4j` も `lib/` に配置する
 - コンパイル/実行時にクラスパスへ含める
 
 コマンド例:
 ```bash
 cd /Users/ktoyo/Documents/Web-under-the-hood/11-build-db-connection
 curl -L -o lib/sqlite-jdbc.jar \
-  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.46.0.0/sqlite-jdbc-3.46.0.0.jar
-curl -L -o lib/slf4j-api.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar
-curl -L -o lib/slf4j-nop.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-nop/2.0.16/slf4j-nop-2.0.16.jar
+  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.51.2.0/sqlite-jdbc-3.51.2.0.jar
 ls -lh lib
 ```
 
 完了条件:
-- `lib/sqlite-jdbc.jar` / `lib/slf4j-api.jar` / `lib/slf4j-nop.jar` が存在する
+- `lib/sqlite-jdbc.jar` が存在する
 
 ---
 
@@ -83,14 +78,21 @@ ls -lh lib
 package db;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.Driver;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class Database {
     private static final String URL = "jdbc:sqlite:sample.db";
 
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL);
+        Driver driver = new org.sqlite.JDBC();
+        Connection connection = driver.connect(URL, new Properties());
+
+        if (connection == null) {
+            throw new SQLException("Failed to create SQLite connection for URL: " + URL);
+        }
+        return connection;
     }
 }
 ```
@@ -282,8 +284,8 @@ java -cp "lib/*:src" Main
 - `javac` に `lib/*` を含める理由:
   - JDBC関連クラス参照を解決してコンパイルするため
 - `java` に `lib/*` を含める理由:
-  - 実行時に `DriverManager` が SQLiteドライバ実装を見つけて接続するため
-  - `sqlite-jdbc` は `slf4j` を要求するため、`sqlite-jdbc.jar` だけだと初期化に失敗し `No suitable driver` になる場合がある
+  - 実行時にSQLiteドライバ実装を読み込んで接続するため
+  - 旧バージョン（例: `3.46.0.0`）では `slf4j` 追加が必要な場合がある
 
 完了条件:
 - 実行エラーなく起動できる
@@ -306,5 +308,4 @@ java -cp "lib/*:src" Main
 
 完了条件:
 - 最低5ケース以上のテスト観点が定義できている
-
 

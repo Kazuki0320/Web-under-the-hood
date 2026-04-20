@@ -20,8 +20,9 @@
 ## 前提環境
 
 - Java 17
-- SQLite JDBC: `org.xerial:sqlite-jdbc`
-- SLF4J: `slf4j-api`, `slf4j-nop`
+- SQLite JDBC: `org.xerial:sqlite-jdbc:3.51.2.0`
+- （任意）SLF4J: `slf4j-api`, `slf4j-nop`
+  - 例: `sqlite-jdbc 3.46.0.0` では必要になるケースあり（`3.51.2.0` では不要な構成あり）
 
 ディレクトリ:
 
@@ -36,8 +37,6 @@ project/
     controller/UserController.java
   lib/
     sqlite-jdbc.jar
-    slf4j-api.jar
-    slf4j-nop.jar
   sample.db
 ```
 
@@ -68,14 +67,21 @@ flowchart LR
 package db;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.Driver;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class Database {
     private static final String URL = "jdbc:sqlite:sample.db";
 
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL);
+        Driver driver = new org.sqlite.JDBC();
+        Connection connection = driver.connect(URL, new Properties());
+
+        if (connection == null) {
+            throw new SQLException("Failed to create SQLite connection for URL: " + URL);
+        }
+        return connection;
     }
 }
 ```
@@ -317,11 +323,7 @@ cd project
 mkdir -p lib
 
 curl -L -o lib/sqlite-jdbc.jar \
-  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.46.0.0/sqlite-jdbc-3.46.0.0.jar
-curl -L -o lib/slf4j-api.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar
-curl -L -o lib/slf4j-nop.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-nop/2.0.16/slf4j-nop-2.0.16.jar
+  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.51.2.0/sqlite-jdbc-3.51.2.0.jar
 ```
 
 ### 2. コンパイルと実行
@@ -346,18 +348,20 @@ java -cp "lib/*:src" Main
 No suitable driver found for jdbc:sqlite:sample.db
 ```
 
-このエラーは、`DriverManager` が使えるドライバを見つけられないときに出ます。  
+このエラーは、`DriverManager` 経由で使えるドライバが見つからないとき、またはドライバ初期化に失敗したときに出ます。  
 今回ハマりやすい原因は次です。
 
 - `sqlite-jdbc.jar` しかクラスパスに入れていない
-- `slf4j` 依存不足で `org.sqlite.JDBC` の初期化に失敗している
+- （旧版のみ）`slf4j` 依存不足で `org.sqlite.JDBC` の初期化に失敗している
 - 実行ディレクトリがずれていて `lib/*` が効いていない
 
-SLF4J の API と実際の実装の両方を含めないとエラーになるので要注意です。
+補足:
+- `sqlite-jdbc 3.51.2.0` では `slf4j` なしでも動作する構成がある
+- `sqlite-jdbc 3.46.0.0` では `slf4j` 追加が必要になるケースがある
 
 ### SLF4J とは？
 
-SLF4J（Simple Logging Facade for Java）は、ロギングの共通窓口です。`slf4j-api` が呼び出し口で、`slf4j-nop` はログを出さない最小実装です。`sqlite-jdbc` は内部でSLF4J APIを参照するため、呼び先となる実装がないとドライバ初期化が失敗し、結果として `No suitable driver` に見えることがあります。
+SLF4J（Simple Logging Facade for Java）は、ロギングの共通窓口です。`slf4j-api` が呼び出し口で、`slf4j-nop` はログを出さない最小実装です。`sqlite-jdbc` のバージョンによっては、SLF4J依存が不足するとドライバ初期化が失敗し、結果として `No suitable driver` に見える場合があります。
 
 ### DriverManager とは？
 
@@ -385,8 +389,8 @@ flowchart LR
 
 今回実際にやった解決:
 
-1. `sqlite-jdbc.jar` に加えて `slf4j-api.jar` と `slf4j-nop.jar` を `lib/` に追加
-2. クラスパスを `lib/sqlite-jdbc.jar:src` ではなく `lib/*:src` に変更
+1. `sqlite-jdbc` を `3.51.2.0` に更新
+2. クラスパスを `lib/*:src` に統一
 3. `project` 直下でコンパイル/実行
 
 解決コマンド（再掲）:
@@ -396,11 +400,7 @@ cd project
 mkdir -p lib
 
 curl -L -o lib/sqlite-jdbc.jar \
-  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.46.0.0/sqlite-jdbc-3.46.0.0.jar
-curl -L -o lib/slf4j-api.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar
-curl -L -o lib/slf4j-nop.jar \
-  https://repo1.maven.org/maven2/org/slf4j/slf4j-nop/2.0.16/slf4j-nop-2.0.16.jar
+  https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.51.2.0/sqlite-jdbc-3.51.2.0.jar
 
 javac -cp "lib/*:src" $(find src -name "*.java")
 java -cp "lib/*:src" Main

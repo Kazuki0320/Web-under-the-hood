@@ -435,3 +435,14 @@ flowchart LR
     B --> C["JDBC Driver (DBごとの実装)"]
     C --> D["SQLite / MySQL / PostgreSQL"]
 ```
+
+## Q30. sqlite-jdbc のバージョンを上げると SLF4J 必須は変わる？
+
+疑問点:
+- 「`slf4j` なしで動かすには sqlite-jdbc のバージョンを上げるべき？」
+
+回答:
+- `3.46.0.0` では `org.sqlite.JDBC` が `org.slf4j.LoggerFactory` を直接参照し、`slf4j` 不足で初期化失敗するケースがある。
+- 新しい系（例: `3.51.2.0`）では、SLF4Jが無いとJDK loggerへfallbackする実装が存在する。
+- このため、`slf4j` なし運用を狙うなら基本はバージョンを上げる方向が妥当。
+- ただし実行環境差分はあり得るため、最終的には対象バージョンで実行確認する。
