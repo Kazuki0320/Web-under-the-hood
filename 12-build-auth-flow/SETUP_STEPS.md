@@ -210,9 +210,77 @@ public class Main {
 - `void handle(Socket client) throws IOException`
 - `AuthService(UserRepository userRepository, TokenStore tokenStore)`
 
+重要:
+- Step 5 直後（クラス雛形だけ作った段階）は、`Main` の見本実装とクラス定義が不一致なためコンパイルが通らないのが正常。
+- Step 6 で上記の最小シグネチャを追加してから、コンパイル確認へ進む。
+
 完了条件:
 - `Main` だけで「起動できる」「接続を受け取れる」「Controllerへ渡せる」状態になっている
 - `Main` に認証ロジックを直接書いていない
+
+---
+
+## Step 7: `Main` が呼ぶ最小シグネチャを実装する
+
+やること:
+- `Main` から呼ばれているコンストラクタ/メソッドだけを先に実装する
+- ここではロジック本体は書かず、まずコンパイルを通すことを目的にする
+
+実装対象:
+1. `AuthService(UserRepository, TokenStore)` コンストラクタ
+2. `AuthController(AuthService)` コンストラクタ
+3. `AuthController#handle(Socket)` メソッド
+
+`src/service/AuthService.java`（見本実装）:
+```java
+package service;
+
+import repository.UserRepository;
+import store.TokenStore;
+
+public class AuthService {
+    private final UserRepository userRepository;
+    private final TokenStore tokenStore;
+
+    public AuthService(UserRepository userRepository, TokenStore tokenStore) {
+        this.userRepository = userRepository;
+        this.tokenStore = tokenStore;
+    }
+}
+```
+
+`src/controller/AuthController.java`（見本実装）:
+```java
+package controller;
+
+import service.AuthService;
+
+import java.io.IOException;
+import java.net.Socket;
+
+public class AuthController {
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    public void handle(Socket client) throws IOException {
+        // Step 8 で HTTP 解析とルーティングを実装する
+    }
+}
+```
+
+コンパイル確認コマンド:
+```bash
+cd /Users/ktoyo/Documents/Web-under-the-hood/12-build-auth-flow
+javac -cp src $(find src -name "*.java")
+```
+
+完了条件:
+- `Main` / `AuthController` / `AuthService` の依存不整合エラーが解消している
+- `javac` が成功する
+- 実処理（/login, /me）はまだ未実装である
 
 ---
 
