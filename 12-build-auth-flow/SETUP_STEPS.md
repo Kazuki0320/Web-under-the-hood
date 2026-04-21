@@ -367,12 +367,10 @@ public class AuthController {
     }
 
     private void handleLogin(Socket client, Map<String, String> headers, String requestBody) throws IOException {
-        // Step 9 で authService.login(...) を呼ぶ
         sendJson(client, "501 Not Implemented", "{\"error\":\"login not implemented\"}");
     }
 
     private void handleMe(Socket client, Map<String, String> headers) throws IOException {
-        // Step 9 で authService.me(...) を呼ぶ
         sendJson(client, "501 Not Implemented", "{\"error\":\"me not implemented\"}");
     }
 
@@ -442,10 +440,115 @@ curl -i http://127.0.0.1:8080/not-found
 
 ---
 
-## この章で押さえる学習ポイント
+## Step 9: 認証本体（login/me）を実装する
 
-1. 認証と認可の違い（今回は認証中心）
-2. HTTP境界（Controller）と業務ロジック（Service）の分離
-3. トークンの状態管理（存在・期限・失効）
-4. エラーの粒度（`400`/`401`/`415` の使い分け）
-5. 「実装できる」だけでなく「フローを説明できる」状態にすること
+やること:
+- `AuthService` に認証とトークン検証の本体ロジックを追加する
+- `TokenStore` に `save/find/remove` を実装する
+- `AuthController` の `handleLogin` / `handleMe` で Service を呼び出す
+
+実装順:
+1. `TokenStore` を実装（メモリMap）
+2. `AuthService` に `login` / `me` を実装
+3. `AuthController` から Service 呼び出しへ差し替え
+
+`src/store/TokenStore.java`（見本実装）:
+```java
+package store;
+
+import model.Session;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class TokenStore {
+    private final Map<String, Session> sessions = new HashMap<>();
+
+    public void save(String token, Session session) {
+        sessions.put(token, session);
+    }
+
+    public Session find(String token) {
+        return sessions.get(token);
+    }
+
+    public void remove(String token) {
+        sessions.remove(token);
+    }
+}
+```
+
+`src/service/AuthService.java`（見本実装）:
+```java
+package service;
+
+import model.Session;
+import repository.UserRepository;
+import store.TokenStore;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+
+public class AuthService {
+    private static final long TOKEN_TTL_SECONDS = 3600;
+    private final UserRepository userRepository;
+    private final TokenStore tokenStore;
+
+    public AuthService(UserRepository userRepository, TokenStore tokenStore) {
+        this.userRepository = userRepository;
+        this.tokenStore = tokenStore;
+    }
+
+    public String login(String id, String password) {
+        if (!"demo".equals(id) || !"password123".equals(password)) {
+            return null;
+        }
+        String token = UUID.randomUUID().toString();
+        long expiresAt = Instant.now().getEpochSecond() + TOKEN_TTL_SECONDS;
+        tokenStore.save(token, new Session(id, expiresAt));
+        return token;
+    }
+
+    public String me(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authorizationHeader.substring("Bearer ".length()).trim();
+        Session session = tokenStore.find(token);
+        if (session == null) {
+            return null;
+        }
+        long now = Instant.now().getEpochSecond();
+        if (now >= session.getExpiresAt()) {
+            tokenStore.remove(token);
+            return null;
+        }
+        return session.getUserId();
+    }
+}
+```
+
+`src/controller/AuthController.java` の差し替えポイント:
+- `handleLogin`: `id/password` 抽出 -> `authService.login(...)` -> 成功200/失敗401
+- `handleMe`: `authorization` ヘッダー -> `authService.me(...)` -> 成功200/失敗401
+
+コンパイル/動作確認:
+```bash
+cd /Users/ktoyo/Documents/Web-under-the-hood/12-build-auth-flow
+javac -cp src $(find src -name "*.java")
+java -cp src Main
+
+# 別ターミナル
+curl -i -X POST http://127.0.0.1:8080/login \
+  -H "Content-Type: application/json" \
+  -d '{"id":"demo","password":"password123"}'
+
+curl -i http://127.0.0.1:8080/me -H "Authorization: Bearer <TOKEN>"
+```
+
+完了条件:
+- `/login` 正常時に `200` と `accessToken` を返せる
+- `/me` で有効トークンは `200`、不正/期限切れは `401` になる
+
+
