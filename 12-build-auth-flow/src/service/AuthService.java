@@ -4,16 +4,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 import model.Session;
-import repository.UserRepository;
 import store.TokenStore;
 
 public class AuthService {
 	private static final long TOKEN_TTL_SECONDS = 3600;
-	private final UserRepository userRepository;
 	private final TokenStore tokenStore;
 
-	public AuthService(UserRepository userRepository, TokenStore tokenStore) {
-		this.userRepository = userRepository;
+	public AuthService(TokenStore tokenStore) {
 		this.tokenStore = tokenStore;
 	}
 

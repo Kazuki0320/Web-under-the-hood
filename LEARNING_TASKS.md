@@ -4,15 +4,7 @@
 
 ## 直近で進める順序
 
-1. 自作認証サーバー（最小構成）を作る
-   - 目的: 認証の基本フロー（ログイン・トークン発行・検証）を実装ベースで理解する
-   - 最小ステップ:
-     - `POST /login` でID/PWを受け取り、最小トークンを発行する
-     - `GET /me` でトークン検証を行い、未認証時は `401` を返す
-     - トークン期限切れと不正トークンの失敗パターンを確認する
-     - 認証あり/なしのアクセスログ差分を記録する
-
-2. TLS/SSL（HTTPS）とクライアント証明書認証（mTLS）を段階的に検証する
+1. TLS/SSL（HTTPS）とクライアント証明書認証（mTLS）を段階的に検証する
    - 目的: 平文HTTPとの違いを、証明書検証・ハンドシェイク・認証失敗の見え方まで含めて説明できるようにする
    - 最小ステップ:
      - 自己署名CAを作成し、サーバー証明書を発行して `https://localhost` の最小サーバーを起動する
@@ -21,7 +13,7 @@
      - mTLSを有効化し、クライアント証明書なし・不正証明書・正しい証明書で挙動を比較する
      - 最後に「誰を認証しているか（サーバー認証/クライアント認証）」「どこで失敗するか（TLS層/HTTP層）」を1枚にまとめる
 
-3. CORS制約とプリフライトを最小構成で検証する
+2. CORS制約とプリフライトを最小構成で検証する
    - 目的: ブラウザの同一オリジン制約とCORSヘッダー、プリフライトの発生条件を実装ベースで理解する
    - 最小ステップ:
      - FE（`http://localhost:5173`）とBE（`http://localhost:3000`）の別オリジン最小アプリを作る
@@ -30,6 +22,15 @@
      - `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` / Origin不一致の失敗パターンを再現して記録する
      - `credentials: include` と `Access-Control-Allow-Credentials: true` の組み合わせを検証し、`Allow-Origin: *` と併用不可を確認する
      - 最後に「発生条件・必要ヘッダー・失敗時の見分け方」を1枚にまとめる
+
+3. DBトランザクション（commit / rollback）とIsolation Levelを検証する
+   - 目的: DB更新の整合性制御とトランザクション分離レベルの挙動を実装ベースで理解する
+   - 最小ステップ:
+     - `setAutoCommit(false)` で明示トランザクションを開始し、`INSERT -> rollback` と `INSERT -> commit` の結果差分を確認する
+     - 1接続での `SELECT` 可視性と、複数接続時の可視性を比較して記録する
+     - `setTransactionIsolation(...)` を各レベルで実行し、`getTransactionIsolation()` と `PRAGMA read_uncommitted` を確認する
+     - 失敗時（例: 例外発生）に `rollback` されるパスを作り、データ不整合が起きないことを確認する
+     - 最後に「autocommit / commit / rollback / isolation」の関係を1枚にまとめる
 
 ## バックエンド学習ロードマップ（36項目）
 
