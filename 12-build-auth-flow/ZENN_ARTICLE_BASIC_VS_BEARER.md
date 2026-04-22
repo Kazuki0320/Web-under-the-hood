@@ -242,44 +242,6 @@ Bearer認証は状態管理が必要になる代わりに、期限管理や失�
 
 ---
 
-## 失敗ケース（Bearer）
-
-- 未送信: `Authorization` がない
-- 不正トークン: `TokenStore` に存在しない
-- 期限切れ: `expiresAt` を超過して無効化される
-
-同じ `401` でも、失敗理由が違えば原因調査や対策が変わる点が重要です。
-
-レスポンス例（現在の実装）:
-
-```http
-# 未送信
-HTTP/1.1 401 Unauthorized
-Content-Type: application/json; charset=UTF-8
-
-{"error":"unauthorized"}
-```
-
-```http
-# 不正トークン
-HTTP/1.1 401 Unauthorized
-Content-Type: application/json; charset=UTF-8
-
-{"error":"unauthorized"}
-```
-
-```http
-# 期限切れ
-HTTP/1.1 401 Unauthorized
-Content-Type: application/json; charset=UTF-8
-
-{"error":"unauthorized"}
-```
-
-Basic認証の場合は、エラー内容が全て同じになるので、切り分けができないというデメリットがあります。
-
----
-
 ## 学びのまとめ
 
 - Basic と Bearer の違い  
