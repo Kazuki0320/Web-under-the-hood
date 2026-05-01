@@ -1,6 +1,6 @@
 {
   "editor.codeActionsOnSave": {
-    "source.organizeImports": true
+    "source.organizeImports": "explicit"
   },
-  "java.saveActions.organizeImports": true
+  "java.saveActions.organizeImports": false
 }

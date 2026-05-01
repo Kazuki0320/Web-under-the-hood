@@ -1,15 +1,15 @@
 package service;
 
-import model.User;
-import repository.UserRepository;
-
 import java.sql.SQLException;
 import java.util.List;
 
-public class UserService {
-    private final UserRepository userRepository;
+import model.User;
+import repository.equals;
 
-    public UserService(UserRepository userRepository) {
+public class UserService {
+    private final equals userRepository;
+
+    public UserService(equals userRepository) {
         this.userRepository = userRepository;
     }
 

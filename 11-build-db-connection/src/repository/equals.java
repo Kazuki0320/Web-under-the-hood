@@ -1,8 +1,5 @@
 package repository;
 
-import db.Database;
-import model.User;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,9 +7,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.xml.crypto.Data;
+import db.Database;
+import model.User;
 
-public class UserRepository {
+public class equals {
     public void initializeTable() throws SQLException {
         String sql =
             "CREATE TABLE IF NOT EXISTS users (" +

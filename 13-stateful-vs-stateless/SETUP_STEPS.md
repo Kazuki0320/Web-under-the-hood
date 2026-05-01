@@ -9,7 +9,6 @@
 - 同一要件を `Cookie Session`（Stateful）と `JWT Bearer`（Stateless）で実装し、差分を説明できる状態を目指す
 - 「認証情報の運搬方法」と「認証状態の保持方法」を分けて整理する
 - 認証方式と状態管理方式を混同せずに説明できるようにし、方式選定理由を根拠付きで説明できるようにする
-- 失敗系（未送信・期限切れ・改ざん・ログアウト後再利用）の挙動差を比較する
 - 最後に「どの要件ならどちらを選ぶか」を根拠付きで言語化する
 
 この章で学ぶ到達目標:
@@ -19,7 +18,6 @@
 4. セキュリティと運用のトレードオフを比較表で示せる
 
 完了条件:
-- 「何を学ぶ章か」を3行で説明できる
 - 方式選択の比較軸（セキュリティ、運用、拡張性）が固定されている
 - 実装結果を使って「なぜこの方式を選ぶか」を説明できる
 
@@ -63,12 +61,11 @@
 比較軸:
 1. 認証判定時にサーバー状態参照が必要か
 2. 失効（logout/revoke）のしやすさ
-3. XSS観点での注意点（CSRFは今回の対象外）
-4. スケール時の構成難易度（集中Storeの要否）
-5. クライアント実装のシンプルさ（ブラウザ/モバイル）
+3. XSS観点での注意点
+4. スケール時の構成難易度
 
 完了条件:
-- 上記5軸で、実装後に方式比較できる準備ができている
+- 上記4軸で、実装後に方式比較できる準備ができている
 
 ---
 
@@ -92,7 +89,7 @@
 
 完了条件:
 - 2方式のAPI境界が先に固定されている
-- 「今回はやらないこと（CSRF）」が明文化されている
+- 今回はやらないこと（CSRF）が明文化されている
 
 ---
 
@@ -119,18 +116,70 @@ touch src/http/HttpRequest.java
 touch src/http/HttpResponse.java
 touch src/model/User.java
 touch src/model/Session.java
-
-touch QA_MEMO_STATEFUL_STATELESS.md
-touch AUTH_COMPARISON_TABLE.md
-touch TEST_LOG.md
 ```
 
 完了条件:
-- 主要クラスとログファイルが揃っている
+- 主要クラスが揃っている
 
 ---
 
-## Step 5: JWTライブラリを導入する
+## Step 5: セッション認証を先に完成させる（Phase 1）
+
+やること:
+- まず Cookie Session 側だけで `login -> me -> logout` を成立させる
+- この段階では JWT 実装は着手しない
+
+Phase 1 で実装する対象:
+- `src/chapter13/model/User.java`
+- `src/chapter13/model/Session.java`
+- `src/chapter13/repository/UserRepository.java`
+- `src/chapter13/store/SessionStore.java`
+- `src/chapter13/service/CookieSessionAuthService.java`
+- `src/chapter13/controller/AuthController.java`（Cookieルートのみ）
+- `src/Main.java`
+
+Phase 1 実装ステップ（この順で着手）:
+1. `User` と `Session` を完成させる
+   - `User`: `id`, `name` の不変フィールド、コンストラクタ、getter
+   - `Session`: `sid`, `userId`, `expiresAtEpochSecond`、getter、`isExpired(now)`
+2. `UserRepository` を実装する
+   - `findByCredentials(String id, String password): User | null`
+   - 固定ユーザー（例: `demo/password123`）で最小実装
+3. `SessionStore` を実装する
+   - `save(String sid, Session session)`
+   - `find(String sid): Session | null`
+   - `delete(String sid)`
+4. `CookieSessionAuthService` を実装する
+   - `login(id, password)`:
+     - `UserRepository` で認証
+     - 成功時 `sid` 生成 + `expiresAt` 設定 + `SessionStore.save(...)`
+   - `me(sid)`:
+     - `SessionStore.find(sid)` -> `null` / 期限切れなら未認証
+   - `logout(sid)`:
+     - `SessionStore.delete(sid)`
+5. `AuthController`（Cookieルートのみ）を実装する
+   - `POST /cookie/login`
+   - `GET /cookie/me`
+   - `POST /cookie/logout`
+   - `Cookie` ヘッダーから `sid` を抽出
+   - `200/401/404/405` を返す
+6. `Main` を実装する
+   - `ServerSocket(8080)` 起動
+   - acceptループ
+   - `AuthController` へ処理委譲
+7. Phase 1 の動作確認を実施する
+   - loginで `Set-Cookie` が返る
+   - meで `200`
+   - logout後meで `401`
+
+Phase 1 の完了条件:
+- `POST /cookie/login` が `Set-Cookie: sid=...` を返す
+- `GET /cookie/me` が `Cookie sid` で `200` を返す
+- `POST /cookie/logout` 後、`GET /cookie/me` が `401` になる
+
+---
+
+## Step 6: JWTライブラリを導入する（Phase 2）
 
 やること:
 - JWT生成/検証をライブラリに委譲する
@@ -159,7 +208,7 @@ curl -L -o lib/java-jwt.jar \
 
 ---
 
-## Step 6: 認証仕様（I/F）を固定する
+## Step 7: 認証仕様（I/F）を固定する
 
 ### 6-1. Cookie Session系
 - `POST /cookie/login`
@@ -192,23 +241,28 @@ curl -L -o lib/java-jwt.jar \
 
 ---
 
-## Step 7: 実装順を固定する（依存が下位から上位）
+## Step 8: 実装順を固定する（セッション先行）
 
 推奨実装順:
 1. `model`（`User`, `Session`）
-2. `store`（`SessionStore`, `JwtRevocationStore`）
-3. `repository`（`UserRepository`）
-4. `security`（`JwtProvider`）
-5. `service`（`CookieSessionAuthService`, `JwtAuthService`）
-6. `controller`（`AuthController`）
-7. `Main`（起動・配線）
+2. `repository`（`UserRepository`）
+3. `store`（`SessionStore`）
+4. `service`（`CookieSessionAuthService`）
+5. `controller`（`AuthController` のCookieルート）
+6. `Main`（起動・配線）
+7. Cookieシナリオ検証（`login -> me -> logout`）
+8. `security`（`JwtProvider`）
+9. `service`（`JwtAuthService`）
+10. `store`（`JwtRevocationStore` は任意）
+11. `controller`（JWTルート追加）
+12. JWTシナリオ検証
 
 完了条件:
 - 実行フローと実装順の違いを説明できる
 
 ---
 
-## Step 8: コンパイル・起動手順を固定する
+## Step 9: コンパイル・起動手順を固定する
 
 コマンド:
 ```bash
@@ -222,9 +276,33 @@ java -cp "lib/*:src" Main
 
 ---
 
-## Step 9: 検証シナリオを先に固定する
+## Step 10: セッションの用途と呼び出し順を固定する
 
-### 9-1. Cookie Session検証
+セッションの用途:
+1. ログイン済み状態をサーバー側で保持するために使う
+2. `sid` から「誰のセッションか」「期限切れか」を判定するために使う
+3. `logout` 時にセッションを削除して即時失効させるために使う
+
+呼び出し順（Cookie Session）:
+1. `POST /cookie/login`
+2. `AuthController` が `CookieSessionAuthService.login(...)` を呼ぶ
+3. `UserRepository.findByCredentials(...)` で認証
+4. 成功時に `SessionStore.save(sid, session)` を呼ぶ
+5. `Set-Cookie: sid=...` を返す
+6. `GET /cookie/me` で `sid` を受ける
+7. `SessionStore.find(sid)` でセッション参照
+8. `isExpired(...)` で期限判定
+9. `POST /cookie/logout` で `SessionStore.delete(sid)` を実行
+
+完了条件:
+- 「セッションは何のために存在するか」を1分で説明できる
+- `login -> save -> find -> delete` の順序を説明できる
+
+---
+
+## Step 11: 検証シナリオを先に固定する
+
+### 11-1. Cookie Session検証
 ```bash
 # login（Cookie保存）
 curl -i -X POST http://127.0.0.1:8080/cookie/login \
@@ -242,7 +320,7 @@ curl -i -X POST http://127.0.0.1:8080/cookie/logout -b /tmp/cookie13.txt
 curl -i http://127.0.0.1:8080/cookie/me -b /tmp/cookie13.txt
 ```
 
-### 9-2. JWT Bearer検証
+### 11-2. JWT Bearer検証
 ```bash
 # login（token取得）
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/jwt/login \
@@ -259,20 +337,20 @@ curl -i -X POST http://127.0.0.1:8080/jwt/logout -H "Authorization: Bearer ${TOK
 curl -i http://127.0.0.1:8080/jwt/me -H "Authorization: Bearer ${TOKEN}"
 ```
 
-### 9-3. 失敗系共通
+### 11-3. 失敗系共通
 - 未送信（Cookieなし/Bearerなし）で `401`
 - 改ざんトークンで `401`
 - 期限切れトークンで `401`
 
 完了条件:
-- 正常系/失敗系ログを `TEST_LOG.md` に残せる
+- 正常系/失敗系の実行結果を再現できる
 
 ---
 
-## Step 10: 比較結果を成果物として残す
+## Step 12: 比較結果を成果物として残す
 
 やること:
-- `AUTH_COMPARISON_TABLE.md` に比較結果を記録する
+- 比較結果を `README.md` または手元メモに記録する
 - 最低限、次の5項目を埋める
 
 比較項目:
@@ -287,7 +365,7 @@ curl -i http://127.0.0.1:8080/jwt/me -H "Authorization: Bearer ${TOKEN}"
 
 ---
 
-## Step 11: この観点を軸に記事作成と実装を進める
+## Step 13: この観点を軸に記事作成と実装を進める
 
 記事と実装の進め方（この章の原則）:
 1. 先に実装して事実（挙動差）を作る
@@ -299,5 +377,220 @@ curl -i http://127.0.0.1:8080/jwt/me -H "Authorization: Bearer ${TOKEN}"
 - 同一要件での実装差分（Cookie Session / JWT Bearer）
 - 選定理由のテンプレート（要件 -> 根拠 -> 結論）
 
-完了条件:
-- 学習記録（SETUP/TEST_LOG/比較表）から記事へ一貫して説明できる
+---
+
+## Step 14: 必要実装をクラス単位で明文化する
+
+### 12-1. `src/model/User.java`
+実装するもの:
+- フィールド: `id`, `name`
+- コンストラクタ
+- getter
+
+受け入れ条件:
+- 認証成功時に `id` と `name` を返却に使える
+
+### 12-2. `src/model/Session.java`
+実装するもの:
+- フィールド: `sid`, `userId`, `expiresAtEpochSecond`
+- コンストラクタ
+- getter
+- `isExpired(nowEpochSecond)` ヘルパー
+
+受け入れ条件:
+- `GET /cookie/me` で期限切れ判定ができる
+
+### 12-3. `src/repository/UserRepository.java`
+実装するもの:
+- `findByCredentials(String id, String password): User | null`
+- 学習用の固定ユーザー（例: `demo/password123`）
+
+受け入れ条件:
+- 正しい資格情報でユーザーが取れ、誤りで `null`
+
+### 12-4. `src/store/SessionStore.java`
+実装するもの:
+- 内部保持: `Map<String, Session>`
+- `save(String sid, Session session)`
+- `find(String sid): Session | null`
+- `delete(String sid)`
+
+受け入れ条件:
+- login後に保存・meで参照・logoutで削除できる
+
+
+
+### 12-5. `src/store/JwtRevocationStore.java`（任意）
+実装するもの:
+- 内部保持: `Set<String>`（`jti` など）
+- `revoke(String tokenId)`
+- `isRevoked(String tokenId): boolean`
+
+受け入れ条件:
+- 有効化した場合、logout後トークンを拒否できる
+
+### 12-6. `src/security/JwtProvider.java`
+実装するもの:
+- `issueToken(String userId): String`
+- `verifyAndGetUserId(String token): String | null`
+- 必要設定: secret, issuer, expiresIn
+
+受け入れ条件:
+- 正常トークンで `userId` を返し、改ざん/期限切れで `null`
+
+### 12-7. `src/service/CookieSessionAuthService.java`
+実装するもの:
+- `login(id, password): LoginResult`
+- `me(sid): User | null`
+- `logout(sid): void`
+- sid生成、store連携、期限管理
+
+受け入れ条件:
+- loginでsid発行、me成功、logout後me失敗
+
+### 12-8. `src/service/JwtAuthService.java`
+実装するもの:
+- `login(id, password): String | null`（JWT）
+- `me(token): User | null`
+- `logout(token): void`（最小: no-op / 任意: revoke）
+
+受け入れ条件:
+- loginでJWT発行、me成功、改ざんJWT失敗
+
+### 12-9. `src/http/HttpRequest.java`
+実装するもの:
+- フィールド: method, path, headers, body
+- `getHeader(name)`
+- `getCookie(name)`（`Cookie` ヘッダ解析）
+- `getBearerToken()`（`Authorization` 解析）
+
+受け入れ条件:
+- controllerで文字列直書きせず取り出せる
+
+### 12-10. `src/http/HttpResponse.java`
+実装するもの:
+- フィールド: status, headers, body
+- `toBytes()`（HTTPレスポンス文字列 + 本文）
+- `json(int statusCode, String body)`
+- `unauthorized()`, `forbidden()`, `notFound()`
+
+受け入れ条件:
+- 全エンドポイントでレスポンス生成を共通化できる
+
+### 12-11. `src/controller/AuthController.java`
+実装するもの:
+- ルーティング:
+  - `POST /cookie/login`
+  - `GET /cookie/me`
+  - `POST /cookie/logout`
+  - `POST /jwt/login`
+  - `GET /jwt/me`
+  - `POST /jwt/logout`
+- JSON本文の最小パース（id/password）
+- status code 分岐（200/401/403/404/405）
+
+受け入れ条件:
+- 6エンドポイントが期待どおりに応答する
+
+### 12-12. `src/Main.java`
+実装するもの:
+- ServerSocket起動 (`8080`)
+- acceptループ
+- 1接続1リクエスト処理
+- Controllerへの委譲
+
+受け入れ条件:
+- `curl` で全エンドポイント検証が可能
+
+---
+
+## Step 15: 手をつける順番（実装オーダー）
+
+1. Model
+- 対象:
+  - `src/model/User.java`
+  - `src/model/Session.java`
+- 実装:
+  - フィールド、コンストラクタ、getter、`Session.isExpired(...)`
+- 目的:
+  - 後続クラスが使う型を先に確定する
+
+2. Repository
+- 対象:
+  - `src/repository/UserRepository.java`
+- 実装:
+  - `findByCredentials(id, password)`（固定ユーザーで可）
+- 目的:
+  - 認証判定の入口を作る
+
+3. Stores（Stateful土台）
+- 対象:
+  - `src/store/SessionStore.java`
+  - `src/store/JwtRevocationStore.java`（任意）
+- 実装:
+  - `save/find/delete`、`matches`、`revoke/isRevoked`
+- 目的:
+  - セッション・失効管理の箱を作る
+
+4. JWT Provider
+- 対象:
+  - `src/security/JwtProvider.java`
+- 実装:
+  - `issueToken(userId)`、`verifyAndGetUserId(token)`、期限/改ざんエラー処理
+- 目的:
+  - JWT発行と検証をサービスから分離する
+
+5. Cookie Session Service
+- 対象:
+  - `src/service/CookieSessionAuthService.java`
+- 実装:
+  - `login`（sid発行）
+  - `me`（sid参照）
+  - `logout`（セッション削除）
+- 目的:
+  - Statefulフローを先に完成させる
+
+6. JWT Service
+- 対象:
+  - `src/service/JwtAuthService.java`
+- 実装:
+  - `login`（JWT発行）
+  - `me`（JWT検証）
+  - `logout`（最小: no-op、任意: revoke）
+- 目的:
+  - Statelessフローを完成させる
+
+7. HTTP DTO
+- 対象:
+  - `src/http/HttpRequest.java`
+  - `src/http/HttpResponse.java`
+- 実装:
+  - ヘッダー取得、Cookie/Bearer抽出、レスポンス共通化
+- 目的:
+  - Controllerの分岐を読みやすくする
+
+8. Controller
+- 対象:
+  - `src/controller/AuthController.java`
+- 実装:
+  - 6ルート振り分け、本文パース、`200/401/403/404/405` 返却
+- 目的:
+  - APIの挙動を確定する
+
+9. Main
+- 対象:
+  - `src/Main.java`
+- 実装:
+  - `ServerSocket(8080)`、acceptループ、Controller呼び出し
+- 目的:
+  - 全体を起動可能にする
+
+10. 検証
+- 対象:
+  - `curl` 実行
+- 実装:
+  - cookie `login/me/logout`
+  - jwt `login/me/logout`
+  - 失敗系（未送信/期限切れ/改ざん）
+- 目的:
+  - 比較記事に使う根拠データを揃える
