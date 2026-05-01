@@ -3,6 +3,7 @@ package chapter13.controller;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
@@ -24,7 +25,23 @@ public class AuthController {
             new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8)
         );
 
-        String readLine = reader.readLine();
+        String requestLine = reader.readLine();
+        if (requestLine == null || requestLine.isBlank()) {
+            return;
+        }
+        String[] parts = requestLine.split(" ");
+        if (parts.length < 2) {
+            return;
+        }
+        String method = parts[0]; // "POST"
+        String path = parts[1]; // "/cookie/login"
+
+        String route = resolveRoute(method, path);
+        if (route == null) {
+            writeJsonResponse(client, 404, "{\"error\":\"not found\"}");
+            return;
+        }
+        writeJsonResponse(client, 200, "{\"route\":\"" + route + "\"}");
     }
 
     public String resolveRoute(String method, String path) {
@@ -35,5 +52,22 @@ public class AuthController {
             return "cookie-me";
         }
         return null;
+    }
+
+    private void writeJsonResponse(Socket client, int statusCode, String body) throws IOException {
+        String reason = (statusCode == 200) ? "OK" : "Not Found";
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+
+        String headers =
+            "HTTP/1.1 " + statusCode + " " + reason + "\r\n" +
+            "Content-Type: application/json; charset=utf-8\r\n" +
+            "Content-Length: " + bodyBytes.length + "\r\n" +
+            "Connection: close\r\n" +
+            "\r\n";
+
+        OutputStream out = client.getOutputStream();
+        out.write(headers.getBytes(StandardCharsets.UTF_8));
+        out.write(bodyBytes);
+        out.flush();
     }
 }
