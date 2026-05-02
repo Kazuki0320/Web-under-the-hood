@@ -35,4 +35,20 @@ public class CookieSessionAuthService {
         sessionStore.save(sid, session);
         return sid;
     }
+
+    public User me(String sid) {
+        if (sid == null || sid.isBlank()) {
+            return null;
+        }
+        Session session = sessionStore.find(sid);
+        if (session == null) {
+            return null;
+        }
+        long now = Instant.now().getEpochSecond();
+        if (session.isExpired(now)) {
+            sessionStore.delete(sid);
+            return null;
+        }
+        return userRepository.findById(session.getUserId());
+    }
 }

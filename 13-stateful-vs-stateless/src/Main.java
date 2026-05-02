@@ -1,6 +1,8 @@
 import chapter13.controller.AuthController;
 import chapter13.repository.UserRepository;
 import chapter13.service.CookieSessionAuthService;
+import chapter13.service.JwtAuthService;
+import chapter13.security.JwtProvider;
 import chapter13.store.SessionStore;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -35,7 +37,9 @@ public class Main {
         UserRepository userRepository = new UserRepository();
         SessionStore sessionStore = new SessionStore();
         CookieSessionAuthService cookieSessionAuthService = new CookieSessionAuthService(userRepository, sessionStore);
-        return new AuthController(cookieSessionAuthService);
+        JwtProvider jwtProvider = new JwtProvider();
+        JwtAuthService jwtAuthService = new JwtAuthService(jwtProvider, userRepository);
+        return new AuthController(cookieSessionAuthService, jwtAuthService);
     }
 
     private static void handleClient(Socket client, AuthController controller) throws IOException {

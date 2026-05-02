@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import chapter13.model.User;
 import chapter13.service.CookieSessionAuthService;
+import chapter13.service.JwtAuthService;
 
 public class AuthController {
     // TODO: HTTPリクエスト行・ヘッダー・本文を解析する。
@@ -17,9 +19,11 @@ public class AuthController {
     // TODO: ステータス・ヘッダー・本文を含むHTTPレスポンスを組み立てる。
     // TODO: 未対応パスや不正リクエストを適切にハンドリングする。
     private final CookieSessionAuthService cookieSessionAuthService;
+    private final JwtAuthService jwtAuthService;
 
-    public AuthController(CookieSessionAuthService cookieSessionAuthService) {
+    public AuthController(CookieSessionAuthService cookieSessionAuthService, JwtAuthService jwtAuthService) {
         this.cookieSessionAuthService = cookieSessionAuthService;
+        this.jwtAuthService = jwtAuthService;
     }
 
     public void handle(Socket client) throws IOException {
@@ -86,6 +90,50 @@ public class AuthController {
             return;
         }
 
+        if ("cookie-me".equals(route)) {
+            String cookieHeader = headers.get("cookie");
+            String sid = extractCookieValue(cookieHeader, "sid");
+            User user = cookieSessionAuthService.me(sid);
+            if (user == null) {
+                writeJsonResponse(client, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            writeJsonResponse(
+                client,
+                200,
+                "{\"id\":\"" + user.getId() + "\",\"name\":\"" + user.getName() + "\"}"
+            );
+            return;
+        }
+
+        if ("jwt-login".equals(route)) {
+            String id = extractJsonValue(requestBody, "id");
+            String password = extractJsonValue(requestBody, "password");
+            String token = jwtAuthService.login(id, password);
+            if (token == null) {
+                writeJsonResponse(client, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            writeJsonResponse(client, 200, "{\"token\":\"" + token + "\"}");
+            return;
+        }
+
+        if ("jwt-me".equals(route)) {
+            String authorization = headers.get("authorization");
+            String token = extractBearerToken(authorization);
+            User user = jwtAuthService.me(token);
+            if (user == null) {
+                writeJsonResponse(client, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            writeJsonResponse(
+                client,
+                200,
+                "{\"id\":\"" + user.getId() + "\",\"name\":\"" + user.getName() + "\"}"
+            );
+            return;
+        }
+
         writeJsonResponse(client, 200, "{\"route\":\"" + route + "\"}");
     }
 
@@ -97,11 +145,17 @@ public class AuthController {
         if ("GET".equals(method) && "/cookie/me".equals(path)) {
             return "cookie-me";
         }
+        if ("POST".equals(method) && "/jwt/login".equals(path)) {
+            return "jwt-login";
+        }
+        if ("GET".equals(method) && "/jwt/me".equals(path)) {
+            return "jwt-me";
+        }
         return null;
     }
 
     private void writeJsonResponse(Socket client, int statusCode, String body) throws IOException {
-        String reason = (statusCode == 200) ? "OK" : "Not Found";
+        String reason = reasonPhrase(statusCode);
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
 
         String headers =
@@ -119,7 +173,7 @@ public class AuthController {
 
     private void writeJsonResponseWithCookie(Socket client, int statusCode, String body, String setCookie)
         throws IOException {
-        String reason = (statusCode == 200) ? "OK" : "Not Found";
+        String reason = reasonPhrase(statusCode);
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
 
         String headers =
@@ -164,6 +218,45 @@ public class AuthController {
 
     return json.substring(firstQuote + 1, secondQuote);
 }
+
+    private String extractCookieValue(String cookieHeader, String key) {
+        if (cookieHeader == null || key == null) {
+            return null;
+        }
+        String[] pairs = cookieHeader.split(";");
+        for (String pair : pairs) {
+            String trimmed = pair.trim();
+            String prefix = key + "=";
+            if (trimmed.startsWith(prefix)) {
+                return trimmed.substring(prefix.length());
+            }
+        }
+        return null;
+    }
+
+    private String extractBearerToken(String authorizationHeader) {
+        if (authorizationHeader == null) {
+            return null;
+        }
+        String prefix = "Bearer ";
+        if (!authorizationHeader.startsWith(prefix)) {
+            return null;
+        }
+        return authorizationHeader.substring(prefix.length()).trim();
+    }
+
+    private String reasonPhrase(int statusCode) {
+        if (statusCode == 200) {
+            return "OK";
+        }
+        if (statusCode == 401) {
+            return "Unauthorized";
+        }
+        if (statusCode == 404) {
+            return "Not Found";
+        }
+        return "Internal Server Error";
+    }
 
     private int parseIntOrZero(String value) {
         if (value == null) {

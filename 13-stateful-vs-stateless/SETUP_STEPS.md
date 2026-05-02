@@ -206,6 +206,40 @@ curl -L -o lib/java-jwt.jar \
 - `lib/` に `java-jwt` と必要依存jarが揃っている
 - `javac -cp "lib/*:src"` が通る準備ができている
 
+Step 6の次に進めるJWT実装ステップ:
+1. 依存jarをそろえる
+   - `lib/` に `java-jwt` と必要依存を配置する
+   - `javac -cp "lib/*:src" $(find src -name '*.java')` が通る状態にする
+2. `JwtProvider` を最小実装する
+   - `issueToken(userId)` を実装する
+   - `verifyAndGetUserId(token)` を実装する
+   - まずは「発行 -> 検証で同じuserIdが取れる」ことを確認する
+3. `JwtAuthService.login` を実装する
+   - `id/password` を `UserRepository` で検証する
+   - 成功時のみ `JwtProvider.issueToken(...)` を返す
+   - 失敗時は `null` を返す
+4. `JwtAuthService.me` を実装する
+   - `Authorization: Bearer ...` のtokenを検証する
+   - `userId` が取れたら `UserRepository.findById(...)` を返す
+   - 検証失敗時は `null` を返す
+5. `AuthController` にJWT 2ルートを追加する
+   - `POST /jwt/login`:
+     - bodyから `id/password` を抽出する
+     - 成功時 `{"token":"..."}`、失敗時 `401`
+   - `GET /jwt/me`:
+     - Bearer tokenを抽出して `service.me(token)` を呼ぶ
+     - 成功時 `200`、失敗時 `401`
+6. `curl` で正常系を通す
+   - `POST /jwt/login` でtoken取得
+   - `GET /jwt/me -H "Authorization: Bearer <token>"` が `200`
+7. 失敗系を確認する
+   - Bearerなしで `401`
+   - 改ざんtokenで `401`
+   - 期限切れtokenで `401`
+8. 最後に整理する
+   - `reasonPhrase` の `401` 対応を確認する
+   - Cookie版とJWT版の挙動差をメモ化する
+
 ---
 
 ## Step 7: 認証仕様（I/F）を固定する
@@ -378,219 +412,3 @@ curl -i http://127.0.0.1:8080/jwt/me -H "Authorization: Bearer ${TOKEN}"
 - 選定理由のテンプレート（要件 -> 根拠 -> 結論）
 
 ---
-
-## Step 14: 必要実装をクラス単位で明文化する
-
-### 12-1. `src/model/User.java`
-実装するもの:
-- フィールド: `id`, `name`
-- コンストラクタ
-- getter
-
-受け入れ条件:
-- 認証成功時に `id` と `name` を返却に使える
-
-### 12-2. `src/model/Session.java`
-実装するもの:
-- フィールド: `sid`, `userId`, `expiresAtEpochSecond`
-- コンストラクタ
-- getter
-- `isExpired(nowEpochSecond)` ヘルパー
-
-受け入れ条件:
-- `GET /cookie/me` で期限切れ判定ができる
-
-### 12-3. `src/repository/UserRepository.java`
-実装するもの:
-- `findByCredentials(String id, String password): User | null`
-- 学習用の固定ユーザー（例: `demo/password123`）
-
-受け入れ条件:
-- 正しい資格情報でユーザーが取れ、誤りで `null`
-
-### 12-4. `src/store/SessionStore.java`
-実装するもの:
-- 内部保持: `Map<String, Session>`
-- `save(String sid, Session session)`
-- `find(String sid): Session | null`
-- `delete(String sid)`
-
-受け入れ条件:
-- login後に保存・meで参照・logoutで削除できる
-
-
-
-### 12-5. `src/store/JwtRevocationStore.java`（任意）
-実装するもの:
-- 内部保持: `Set<String>`（`jti` など）
-- `revoke(String tokenId)`
-- `isRevoked(String tokenId): boolean`
-
-受け入れ条件:
-- 有効化した場合、logout後トークンを拒否できる
-
-### 12-6. `src/security/JwtProvider.java`
-実装するもの:
-- `issueToken(String userId): String`
-- `verifyAndGetUserId(String token): String | null`
-- 必要設定: secret, issuer, expiresIn
-
-受け入れ条件:
-- 正常トークンで `userId` を返し、改ざん/期限切れで `null`
-
-### 12-7. `src/service/CookieSessionAuthService.java`
-実装するもの:
-- `login(id, password): LoginResult`
-- `me(sid): User | null`
-- `logout(sid): void`
-- sid生成、store連携、期限管理
-
-受け入れ条件:
-- loginでsid発行、me成功、logout後me失敗
-
-### 12-8. `src/service/JwtAuthService.java`
-実装するもの:
-- `login(id, password): String | null`（JWT）
-- `me(token): User | null`
-- `logout(token): void`（最小: no-op / 任意: revoke）
-
-受け入れ条件:
-- loginでJWT発行、me成功、改ざんJWT失敗
-
-### 12-9. `src/http/HttpRequest.java`
-実装するもの:
-- フィールド: method, path, headers, body
-- `getHeader(name)`
-- `getCookie(name)`（`Cookie` ヘッダ解析）
-- `getBearerToken()`（`Authorization` 解析）
-
-受け入れ条件:
-- controllerで文字列直書きせず取り出せる
-
-### 12-10. `src/http/HttpResponse.java`
-実装するもの:
-- フィールド: status, headers, body
-- `toBytes()`（HTTPレスポンス文字列 + 本文）
-- `json(int statusCode, String body)`
-- `unauthorized()`, `forbidden()`, `notFound()`
-
-受け入れ条件:
-- 全エンドポイントでレスポンス生成を共通化できる
-
-### 12-11. `src/controller/AuthController.java`
-実装するもの:
-- ルーティング:
-  - `POST /cookie/login`
-  - `GET /cookie/me`
-  - `POST /cookie/logout`
-  - `POST /jwt/login`
-  - `GET /jwt/me`
-  - `POST /jwt/logout`
-- JSON本文の最小パース（id/password）
-- status code 分岐（200/401/403/404/405）
-
-受け入れ条件:
-- 6エンドポイントが期待どおりに応答する
-
-### 12-12. `src/Main.java`
-実装するもの:
-- ServerSocket起動 (`8080`)
-- acceptループ
-- 1接続1リクエスト処理
-- Controllerへの委譲
-
-受け入れ条件:
-- `curl` で全エンドポイント検証が可能
-
----
-
-## Step 15: 手をつける順番（実装オーダー）
-
-1. Model
-- 対象:
-  - `src/model/User.java`
-  - `src/model/Session.java`
-- 実装:
-  - フィールド、コンストラクタ、getter、`Session.isExpired(...)`
-- 目的:
-  - 後続クラスが使う型を先に確定する
-
-2. Repository
-- 対象:
-  - `src/repository/UserRepository.java`
-- 実装:
-  - `findByCredentials(id, password)`（固定ユーザーで可）
-- 目的:
-  - 認証判定の入口を作る
-
-3. Stores（Stateful土台）
-- 対象:
-  - `src/store/SessionStore.java`
-  - `src/store/JwtRevocationStore.java`（任意）
-- 実装:
-  - `save/find/delete`、`matches`、`revoke/isRevoked`
-- 目的:
-  - セッション・失効管理の箱を作る
-
-4. JWT Provider
-- 対象:
-  - `src/security/JwtProvider.java`
-- 実装:
-  - `issueToken(userId)`、`verifyAndGetUserId(token)`、期限/改ざんエラー処理
-- 目的:
-  - JWT発行と検証をサービスから分離する
-
-5. Cookie Session Service
-- 対象:
-  - `src/service/CookieSessionAuthService.java`
-- 実装:
-  - `login`（sid発行）
-  - `me`（sid参照）
-  - `logout`（セッション削除）
-- 目的:
-  - Statefulフローを先に完成させる
-
-6. JWT Service
-- 対象:
-  - `src/service/JwtAuthService.java`
-- 実装:
-  - `login`（JWT発行）
-  - `me`（JWT検証）
-  - `logout`（最小: no-op、任意: revoke）
-- 目的:
-  - Statelessフローを完成させる
-
-7. HTTP DTO
-- 対象:
-  - `src/http/HttpRequest.java`
-  - `src/http/HttpResponse.java`
-- 実装:
-  - ヘッダー取得、Cookie/Bearer抽出、レスポンス共通化
-- 目的:
-  - Controllerの分岐を読みやすくする
-
-8. Controller
-- 対象:
-  - `src/controller/AuthController.java`
-- 実装:
-  - 6ルート振り分け、本文パース、`200/401/403/404/405` 返却
-- 目的:
-  - APIの挙動を確定する
-
-9. Main
-- 対象:
-  - `src/Main.java`
-- 実装:
-  - `ServerSocket(8080)`、acceptループ、Controller呼び出し
-- 目的:
-  - 全体を起動可能にする
-
-10. 検証
-- 対象:
-  - `curl` 実行
-- 実装:
-  - cookie `login/me/logout`
-  - jwt `login/me/logout`
-  - 失敗系（未送信/期限切れ/改ざん）
-- 目的:
-  - 比較記事に使う根拠データを揃える

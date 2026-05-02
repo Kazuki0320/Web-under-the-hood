@@ -14,8 +14,8 @@ public class SessionStore {
         sessions.put(sid, session);
     }
     
-    public void find(String sid) {
-        sessions.get(sid);
+    public Session find(String sid) {
+        return sessions.get(sid);
     }
 
     public void delete(String sid) {

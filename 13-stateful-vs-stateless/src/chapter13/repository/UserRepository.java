@@ -14,4 +14,11 @@ public class UserRepository {
         }
         return null;
     }
+
+    public User findById(String userId) {
+        if ("1".equals(userId)) {
+            return new User("1", "Demo User");
+        }
+        return null;
+    }
 } 
